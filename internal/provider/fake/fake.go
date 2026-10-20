@@ -12,6 +12,11 @@ import (
 	"github.com/dscafati/secretref/internal/secret"
 )
 
+var (
+	_ provider.Provider = (*Fake)(nil)
+	_ provider.Writer   = (*Fake)(nil)
+)
+
 type result struct {
 	value secret.Secret
 	err   error

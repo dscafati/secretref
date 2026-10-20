@@ -3,7 +3,6 @@ package ref
 import (
 	"fmt"
 	"net/url"
-	"strconv"
 	"strings"
 )
 
@@ -69,6 +68,13 @@ func Parse(s string) (Ref, error) {
 		return fail("want %s://<location>/<name>", scheme)
 	}
 
+	if scheme != "aws-sm" && strings.Contains(name, "/") {
+		return fail("%s name must not contain \"/\"", scheme)
+	}
+	if scheme == "aws-sm" && (strings.HasSuffix(name, "/") || strings.Contains(name, "//")) {
+		return fail("name must not have an empty path segment")
+	}
+
 	var opts map[string]string
 	if hasQuery {
 		values, err := url.ParseQuery(query)
@@ -90,8 +96,8 @@ func Parse(s string) (Ref, error) {
 		}
 	}
 	if v, ok := opts["version"]; ok && v != "latest" {
-		if n, err := strconv.Atoi(v); err != nil || n < 1 {
-			return fail("version must be a positive integer or \"latest\"")
+		if !isPositiveInt(v) {
+			return fail("version %q must be a positive integer without sign or leading zeros, or \"latest\"", v)
 		}
 	}
 
@@ -107,3 +113,16 @@ func Parse(s string) (Ref, error) {
 
 // String returns the reference as it was written.
 func (r Ref) String() string { return r.Raw }
+
+// isPositiveInt reports whether v is digits only, starts with 1-9.
+func isPositiveInt(v string) bool {
+	if v == "" || v[0] == '0' {
+		return false
+	}
+	for _, c := range v {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}

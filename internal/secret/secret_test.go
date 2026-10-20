@@ -62,3 +62,29 @@ func TestRevealReturnsCopy(t *testing.T) {
 		t.Fatalf("Reveal did not return a copy: got %q", again)
 	}
 }
+
+func TestUnexportedFieldNeverPrints(t *testing.T) {
+	type holder struct{ s secret.Secret }
+	h := holder{s: secret.New([]byte(canary))}
+	for name, out := range map[string]string{
+		"%v":     fmt.Sprintf("%v", h),
+		"%+v":    fmt.Sprintf("%+v", h),
+		"%#v":    fmt.Sprintf("%#v", h),
+		"Sprint": fmt.Sprint(h),
+		"ptr %v": fmt.Sprintf("%v", &h),
+	} {
+		if strings.Contains(out, canary) {
+			t.Errorf("%s leaked the value: %q", name, out)
+		}
+	}
+}
+
+func TestZeroValue(t *testing.T) {
+	var s secret.Secret
+	if got := s.Reveal(); len(got) != 0 {
+		t.Errorf("Reveal() = %q, want empty", got)
+	}
+	if got := s.String(); got != "[redacted]" {
+		t.Errorf("String() = %q", got)
+	}
+}

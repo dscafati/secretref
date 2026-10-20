@@ -11,19 +11,30 @@ const redacted = "[redacted]"
 // only Reveal exposes the bytes.
 //
 // SECURITY: no method other than Reveal may return or print the value.
+//
+// SECURITY: the bytes sit behind a pointer. fmt cannot call Format on a Secret
+// stored in an unexported struct field, so it prints the field reflectively;
+// with a pointer that shows an address, not the bytes.
 type Secret struct {
-	value []byte
+	v *value
+}
+
+type value struct {
+	b []byte
 }
 
 // New returns a Secret holding a copy of b.
 func New(b []byte) Secret {
-	return Secret{value: slices.Clone(b)}
+	return Secret{v: &value{b: slices.Clone(b)}}
 }
 
 // Reveal returns a copy of the value. Call it only where the value is handed
 // to the child process.
 func (s Secret) Reveal() []byte {
-	return slices.Clone(s.value)
+	if s.v == nil {
+		return []byte{}
+	}
+	return slices.Clone(s.v.b)
 }
 
 // String returns "[redacted]".
