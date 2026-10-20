@@ -1,0 +1,16 @@
+[
+  {
+    "line": 1,
+    "key": "A",
+    "value": "a#b",
+    "quote": "none",
+    "ref": null
+  },
+  {
+    "line": 2,
+    "key": "B",
+    "value": "http://h/p#frag",
+    "quote": "none",
+    "ref": null
+  }
+]

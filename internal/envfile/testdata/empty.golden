@@ -1,0 +1,23 @@
+[
+  {
+    "line": 1,
+    "key": "A",
+    "value": "",
+    "quote": "none",
+    "ref": null
+  },
+  {
+    "line": 2,
+    "key": "B",
+    "value": "",
+    "quote": "double",
+    "ref": null
+  },
+  {
+    "line": 3,
+    "key": "C",
+    "value": "",
+    "quote": "single",
+    "ref": null
+  }
+]

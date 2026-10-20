@@ -1,0 +1,16 @@
+[
+  {
+    "line": 2,
+    "key": "K",
+    "value": "v",
+    "quote": "none",
+    "ref": "keyring://a/b"
+  },
+  {
+    "line": 4,
+    "key": "L",
+    "value": "w",
+    "quote": "none",
+    "ref": "aws-sm://eu-west-1/p/db#password"
+  }
+]

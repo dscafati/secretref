@@ -1,0 +1,44 @@
+[
+  {
+    "line": 1,
+    "key": "A",
+    "value": "l1\nl2",
+    "quote": "double",
+    "ref": null
+  },
+  {
+    "line": 2,
+    "key": "B",
+    "value": "say \"hi\"",
+    "quote": "double",
+    "ref": null
+  },
+  {
+    "line": 3,
+    "key": "C",
+    "value": "back\\slash",
+    "quote": "double",
+    "ref": null
+  },
+  {
+    "line": 4,
+    "key": "D",
+    "value": "cost \\$5",
+    "quote": "double",
+    "ref": null
+  },
+  {
+    "line": 5,
+    "key": "E",
+    "value": "t\tr\rz",
+    "quote": "double",
+    "ref": null
+  },
+  {
+    "line": 6,
+    "key": "F",
+    "value": "keep \\q",
+    "quote": "double",
+    "ref": null
+  }
+]

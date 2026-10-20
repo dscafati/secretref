@@ -1,0 +1,16 @@
+[
+  {
+    "line": 1,
+    "key": "KEY",
+    "value": "v",
+    "quote": "none",
+    "ref": null
+  },
+  {
+    "line": 2,
+    "key": "B",
+    "value": "w",
+    "quote": "none",
+    "ref": null
+  }
+]

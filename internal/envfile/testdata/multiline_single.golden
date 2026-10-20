@@ -1,0 +1,16 @@
+[
+  {
+    "line": 1,
+    "key": "A",
+    "value": "line1\nline2 \"q\" \\n $X\n\nline4",
+    "quote": "single",
+    "ref": null
+  },
+  {
+    "line": 5,
+    "key": "B",
+    "value": "one",
+    "quote": "single",
+    "ref": null
+  }
+]
