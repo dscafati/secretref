@@ -3,6 +3,7 @@ package ref
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 )
 
@@ -71,7 +72,7 @@ func Parse(s string) (Ref, error) {
 	if scheme != "aws-sm" && strings.Contains(name, "/") {
 		return fail("%s name must not contain \"/\"", scheme)
 	}
-	if scheme == "aws-sm" && (strings.HasSuffix(name, "/") || strings.Contains(name, "//")) {
+	if scheme == "aws-sm" && slices.Contains(strings.Split(name, "/"), "") {
 		return fail("name must not have an empty path segment")
 	}
 

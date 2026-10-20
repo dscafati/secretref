@@ -76,6 +76,11 @@ func TestUnexportedFieldNeverPrints(t *testing.T) {
 		if strings.Contains(out, canary) {
 			t.Errorf("%s leaked the value: %q", name, out)
 		}
+		// A byte-slice rendering prints decimal bytes, e.g. "104 117 110".
+		decimal := strings.Trim(fmt.Sprintf("%d", []byte(canary)), "[]")
+		if strings.Contains(out, decimal) {
+			t.Errorf("%s leaked the value as decimal bytes: %q", name, out)
+		}
 	}
 }
 

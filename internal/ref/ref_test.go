@@ -40,6 +40,7 @@ func TestParseRef(t *testing.T) {
 			want: ref.Ref{Scheme: "aws-sm", Location: "r", Name: "x", Field: "a?b", Raw: "aws-sm://r/x#a?b"},
 		},
 		{in: "aws-sm://r/x/", wantErr: true},
+		{in: "aws-sm://r//x", wantErr: true},
 		{in: "aws-sm://r/x//y", wantErr: true},
 		{in: "gcp-sm://p/a/b", wantErr: true},
 		{in: "keyring://svc/a/b", wantErr: true},
