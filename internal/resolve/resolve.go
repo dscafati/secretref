@@ -36,6 +36,9 @@ type Var struct {
 	File    string
 	Ref     *ref.Ref
 	FromEnv bool
+	// FellBack is true when the reference failed and AllowMissing kept the
+	// file's value instead.
+	FellBack bool
 }
 
 // Failure is an annotated key that did not resolve.
@@ -81,12 +84,13 @@ const (
 
 // slot is the working state of one key.
 type slot struct {
-	entry envfile.Entry
-	kind  kind
-	value string // plain: raw until expanded; env: the env value
-	sec   secret.Secret
-	state int // plain expansion: 0 todo, 1 in progress, 2 done
-	fail  bool
+	entry    envfile.Entry
+	kind     kind
+	value    string // plain: raw until expanded; env: the env value
+	sec      secret.Secret
+	state    int // plain expansion: 0 todo, 1 in progress, 2 done
+	fail     bool
+	fellBack bool
 }
 
 // Resolve resolves entries. Later entries win over earlier ones with the same
@@ -128,7 +132,7 @@ func (r *Resolver) Resolve(ctx context.Context, entries []envfile.Entry) Result 
 			continue
 		}
 		if r.opts.AllowMissing {
-			s.kind = kindPlain
+			s.kind, s.fellBack = kindPlain, true
 			warned = append(warned, Failure{Key: s.entry.Key, Ref: *s.entry.Ref, Err: err})
 			continue
 		}
@@ -148,7 +152,7 @@ func (r *Resolver) Resolve(ctx context.Context, entries []envfile.Entry) Result 
 		if s.fail {
 			continue
 		}
-		v := Var{Key: key, File: s.entry.File, Ref: s.entry.Ref, FromEnv: s.kind == kindEnv}
+		v := Var{Key: key, File: s.entry.File, Ref: s.entry.Ref, FromEnv: s.kind == kindEnv, FellBack: s.fellBack}
 		if s.kind == kindSecret {
 			v.Value = s.sec
 		} else {

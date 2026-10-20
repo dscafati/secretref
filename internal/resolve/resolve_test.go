@@ -134,6 +134,13 @@ func TestFailuresCollected(t *testing.T) {
 	if !strings.Contains(res.Warnings[0], "A") || !strings.Contains(res.Warnings[1], "Z") {
 		t.Errorf("Warnings = %v", res.Warnings)
 	}
+	fellBack := map[string]bool{}
+	for _, v := range res.Vars {
+		fellBack[v.Key] = v.FellBack
+	}
+	if diff := cmp.Diff(map[string]bool{"Z": true, "OK": false, "A": true}, fellBack); diff != "" {
+		t.Errorf("FellBack (-want +got):\n%s", diff)
+	}
 }
 
 type blocking struct {
