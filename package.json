@@ -1,0 +1,26 @@
+{
+  "name": "secretref",
+  "version": "0.0.1",
+  "description": "Resolve secrets from vaults using reference comments in your .env files. No code changes.",
+  "keywords": [
+    "env",
+    "dotenv",
+    "secrets",
+    "vault",
+    "aws-secrets-manager",
+    "gcp-secret-manager",
+    "azure-key-vault",
+    "cli"
+  ],
+  "license": "Apache-2.0",
+  "author": "Diego Scafati",
+  "bin": {
+    "secretref": "bin/secretref.js"
+  },
+  "files": [
+    "bin/"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}
