@@ -1,0 +1,50 @@
+name: Bug report
+description: Something does not work as documented.
+labels: [bug, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Never paste secret values. Redact references if they are sensitive.
+  - type: textarea
+    id: version
+    attributes:
+      label: Output of `secretref version`
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and architecture
+      placeholder: Linux amd64, macOS arm64, Windows amd64
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      options:
+        - aws
+        - gcp
+        - keyring
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: discovery
+    attributes:
+      label: How did you run into this?
+      description: Describe what you were doing when you hit the bug.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include the command and a redacted env file.

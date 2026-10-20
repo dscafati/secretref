@@ -1,0 +1,24 @@
+name: Feature request
+description: Suggest a change to secretref.
+labels: [enhancement, needs-triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What do you propose?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What else did you consider?
+  - type: textarea
+    id: discovery
+    attributes:
+      label: How did you run into this?

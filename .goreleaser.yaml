@@ -1,0 +1,155 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: secretref
+
+before:
+  hooks:
+    - make docs
+
+builds:
+  - id: secretref
+    main: ./cmd/secretref
+    binary: secretref
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/dscafati/secretref/internal/build.Version={{.Version}}
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+
+archives:
+  - id: secretref
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+      - src: dist-docs/man/*
+        dst: man
+        strip_parent: true
+      - src: dist-docs/completions/*
+        dst: completions
+        strip_parent: true
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+signs:
+  - id: cosign-checksums
+    cmd: cosign
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - --yes
+      - --bundle=${signature}
+      - ${artifact}
+    artifacts: checksum
+    output: true
+
+sboms:
+  - id: archive-sboms
+    artifacts: archive
+    cmd: syft
+    documents:
+      - "${artifact}.sbom.json"
+    args: ["${artifact}", "--output", "spdx-json=${document}"]
+
+changelog:
+  sort: asc
+  use: github
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]-]+\))?!?:.+$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?fix(\([[:word:]-]+\))?!?:.+$'
+      order: 1
+    - title: Performance
+      regexp: '^.*?perf(\([[:word:]-]+\))?!?:.+$'
+      order: 2
+    - title: Refactoring
+      regexp: '^.*?refactor(\([[:word:]-]+\))?!?:.+$'
+      order: 3
+    - title: Documentation
+      regexp: '^.*?docs(\([[:word:]-]+\))?!?:.+$'
+      order: 4
+    - title: Other
+      order: 999
+  filters:
+    exclude:
+      - '^.*?(test|ci|build|chore)(\([[:word:]-]+\))?!?:.+$'
+
+homebrew_casks:
+  - name: secretref
+    repository:
+      owner: dscafati
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/dscafati/secretref
+    description: Resolve secrets from vaults using reference comments in .env files
+    binaries:
+      - secretref
+    manpages:
+      - man/secretref.1
+
+scoops:
+  - name: secretref
+    repository:
+      owner: dscafati
+      name: scoop-bucket
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/dscafati/secretref
+    description: Resolve secrets from vaults using reference comments in .env files
+    license: Apache-2.0
+
+nfpms:
+  - id: packages
+    package_name: secretref
+    vendor: Diego Scafati
+    maintainer: Diego Scafati <dscafati@gmail.com>
+    homepage: https://github.com/dscafati/secretref
+    description: Resolve secrets from vaults using reference comments in .env files
+    license: Apache-2.0
+    formats: [deb, rpm]
+    contents:
+      - src: dist-docs/man/*
+        dst: /usr/share/man/man1/
+      - src: dist-docs/completions/secretref.bash
+        dst: /usr/share/bash-completion/completions/secretref
+      - src: dist-docs/completions/secretref.zsh
+        dst: /usr/share/zsh/vendor-completions/_secretref
+      - src: dist-docs/completions/secretref.fish
+        dst: /usr/share/fish/vendor_completions.d/secretref.fish
+
+winget:
+  - name: secretref
+    publisher: dscafati
+    package_identifier: dscafati.secretref
+    short_description: Resolve secrets from vaults using reference comments in .env files
+    license: Apache-2.0
+    homepage: https://github.com/dscafati/secretref
+    publisher_url: https://github.com/dscafati
+    repository:
+      owner: dscafati
+      name: winget-pkgs
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+      pull_request:
+        enabled: true
+        base:
+          owner: microsoft
+          name: winget-pkgs
+          branch: master
+
+release:
+  github:
+    owner: dscafati
+    name: secretref
+  draft: false
+  prerelease: auto

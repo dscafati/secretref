@@ -1,0 +1,18 @@
+# Decision records
+
+Each record explains one architectural decision. Accepted records are never edited except for the Status line. See [0001](0001-record-architecture-decisions.md).
+
+| Number | Title | Status |
+|---|---|---|
+| 0001 | [Record architecture decisions](0001-record-architecture-decisions.md) | Accepted |
+| 0002 | [Resolve at process start; never write values to disk](0002-resolve-at-process-start.md) | Accepted |
+| 0003 | [Annotations are comments; files stay valid dotenv](0003-annotations-are-comments.md) | Accepted |
+| 0004 | [Inject all variables; the existing environment wins](0004-inject-all-variables-environment-wins.md) | Accepted |
+| 0005 | [Go with pure-Go dependencies, no CGO](0005-pure-go-no-cgo.md) | Accepted |
+| 0006 | [Manual dependency injection](0006-manual-dependency-injection.md) | Accepted |
+| 0007 | [Writes only to the local keyring](0007-writes-only-to-local-keyring.md) | Accepted |
+| 0008 | [GCP over REST, not gRPC](0008-gcp-over-rest.md) | Accepted |
+| 0009 | [Docker Compose support through a names-only override](0009-compose-names-only-override.md) | Accepted |
+| 0010 | [Apache-2.0 license](0010-apache-2-license.md) | Accepted |
+| 0011 | [No telemetry](0011-no-telemetry.md) | Accepted |
+| 0012 | [No AI co-author trailers](0012-no-ai-co-author-trailers.md) | Accepted |

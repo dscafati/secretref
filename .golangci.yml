@@ -1,0 +1,61 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - gosec
+    - errorlint
+    - revive
+    - gocritic
+    - bodyclose
+    - nolintlint
+    - depguard
+    - forbidigo
+    - gochecknoglobals
+  settings:
+    nolintlint:
+      require-specific: true
+      require-explanation: true
+    revive:
+      rules:
+        - name: exported
+    depguard:
+      rules:
+        banned:
+          deny:
+            - pkg: github.com/pkg/errors
+              desc: use the standard library errors package
+            - pkg: io/ioutil
+              desc: deprecated; use io and os
+            - pkg: github.com/stretchr/testify
+              desc: use stdlib testing and go-cmp
+    forbidigo:
+      forbid:
+        - pattern: ^fmt\.Print
+          msg: write to an injected io.Writer; stdout belongs to the child process
+        - pattern: ^print$
+        - pattern: ^println$
+        - pattern: ^log\.
+          msg: use log/slog on stderr
+  exclusions:
+    rules:
+      - path: ^(internal/cli|cmd)/
+        linters:
+          - forbidigo
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/dscafati/secretref

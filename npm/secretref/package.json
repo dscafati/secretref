@@ -1,0 +1,28 @@
+{
+  "name": "secretref",
+  "version": "0.0.0",
+  "description": "Resolve secrets from vaults using reference comments in your .env files. No code changes.",
+  "license": "Apache-2.0",
+  "author": "Diego Scafati",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dscafati/secretref.git"
+  },
+  "homepage": "https://github.com/dscafati/secretref",
+  "keywords": ["env", "dotenv", "secrets", "aws-secrets-manager", "gcp-secret-manager", "keyring", "cli"],
+  "bin": {
+    "secretref": "bin/secretref.js"
+  },
+  "files": ["bin/"],
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {
+    "@secretref/linux-x64": "0.0.0",
+    "@secretref/linux-arm64": "0.0.0",
+    "@secretref/darwin-x64": "0.0.0",
+    "@secretref/darwin-arm64": "0.0.0",
+    "@secretref/win32-x64": "0.0.0",
+    "@secretref/win32-arm64": "0.0.0"
+  }
+}

@@ -1,0 +1,14 @@
+pre-commit:
+  parallel: true
+  commands:
+    gofumpt:
+      glob: "*.go"
+      run: go tool -modfile=tools/go.mod gofumpt -l -w {staged_files}
+      stage_fixed: true
+    gitleaks:
+      run: go tool -modfile=tools/go.mod gitleaks git --staged --redact
+
+pre-push:
+  commands:
+    lint:
+      run: make lint
