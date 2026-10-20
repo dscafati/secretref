@@ -1,0 +1,109 @@
+package ref
+
+import (
+	"fmt"
+	"net/url"
+	"strconv"
+	"strings"
+)
+
+// Ref is a parsed secret reference.
+type Ref struct {
+	Scheme   string            // "aws-sm" | "gcp-sm" | "keyring"
+	Location string            // region | project | service
+	Name     string            // secret name (may contain "/") | secret | account
+	Field    string            // JSON field after "#", "" if none
+	Opts     map[string]string // query params: profile, version
+	Raw      string
+}
+
+// Error reports a reference that does not parse.
+type Error struct {
+	Raw string
+	Msg string
+}
+
+// Error implements error.
+func (e *Error) Error() string {
+	return fmt.Sprintf("invalid reference %s: %s", e.Raw, e.Msg)
+}
+
+// allowedOpts lists, per scheme, the query keys a reference may carry. A
+// scheme absent from this map is unknown.
+func allowedOpts(scheme string) (map[string]bool, bool) {
+	switch scheme {
+	case "aws-sm":
+		return map[string]bool{"profile": true}, true
+	case "gcp-sm":
+		return map[string]bool{"version": true}, true
+	case "keyring":
+		return nil, true
+	}
+	return nil, false
+}
+
+// Parse validates s and returns the reference it names. Errors have type
+// *Error.
+func Parse(s string) (Ref, error) {
+	fail := func(format string, args ...any) (Ref, error) {
+		return Ref{}, &Error{Raw: s, Msg: fmt.Sprintf(format, args...)}
+	}
+
+	scheme, rest, ok := strings.Cut(s, "://")
+	if !ok {
+		return fail("missing scheme")
+	}
+	allowed, known := allowedOpts(scheme)
+	if !known {
+		return fail("unknown scheme %q", scheme)
+	}
+
+	rest, field, hasField := strings.Cut(rest, "#")
+	if hasField && field == "" {
+		return fail("empty field after #")
+	}
+	rest, query, hasQuery := strings.Cut(rest, "?")
+
+	location, name, ok := strings.Cut(rest, "/")
+	if !ok || location == "" || name == "" {
+		return fail("want %s://<location>/<name>", scheme)
+	}
+
+	var opts map[string]string
+	if hasQuery {
+		values, err := url.ParseQuery(query)
+		if err != nil {
+			return fail("malformed query")
+		}
+		if len(values) == 0 {
+			return fail("empty query")
+		}
+		opts = make(map[string]string, len(values))
+		for k, v := range values {
+			if !allowed[k] {
+				return fail("unknown query key %q for %s", k, scheme)
+			}
+			if len(v) != 1 || v[0] == "" {
+				return fail("query key %q needs exactly one non-empty value", k)
+			}
+			opts[k] = v[0]
+		}
+	}
+	if v, ok := opts["version"]; ok && v != "latest" {
+		if n, err := strconv.Atoi(v); err != nil || n < 1 {
+			return fail("version must be a positive integer or \"latest\"")
+		}
+	}
+
+	return Ref{
+		Scheme:   scheme,
+		Location: location,
+		Name:     name,
+		Field:    field,
+		Opts:     opts,
+		Raw:      s,
+	}, nil
+}
+
+// String returns the reference as it was written.
+func (r Ref) String() string { return r.Raw }
