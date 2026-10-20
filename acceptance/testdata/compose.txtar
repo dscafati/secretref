@@ -1,0 +1,41 @@
+# docker compose gets the values through its environment and an override
+# that holds only ${KEY} names; the override is removed afterwards.
+exec secretref run -- docker compose -show-compose DB_PASSWORD
+stdout 'DB_PASSWORD: \$\{DB_PASSWORD\}'
+! stdout 'OTHER'
+grep '^DB_PASSWORD=SR_CANARY_7f3a9c$' child-env.txt
+no-canary
+no-override
+
+# Compose mode spawns the child and passes its exit code through.
+exit-code 6 secretref run -- docker compose -exit 6 DB_PASSWORD
+no-canary
+no-override
+
+# Docker global flags before compose still select compose mode, and a compose
+# file whose services do not use the env file gets a warning.
+exec secretref run -- docker --context default compose -f unrelated.yaml DB_PASSWORD
+stderr '^secretref: compose: no service uses \.env; containers will see file values$'
+grep '^DB_PASSWORD=SR_CANARY_7f3a9c$' child-env.txt
+no-canary
+no-override
+
+-- unrelated.yaml --
+services:
+  other:
+    image: alpine
+-- .env --
+# secretref: keyring://app/db_password
+DB_PASSWORD=localdev
+-- other.env --
+OTHER=1
+-- compose.yaml --
+services:
+  web:
+    image: alpine
+    env_file: .env
+  worker:
+    image: alpine
+    env_file:
+      - path: other.env
+        required: false

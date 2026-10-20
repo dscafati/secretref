@@ -1,0 +1,29 @@
+# check lists every annotated key with ok or the failure, never values, and
+# resolves keys even when the environment already sets them.
+env DB_PASSWORD=from-env
+exit-code 3 secretref check
+stdout '^KEY +REF +STATUS$'
+stdout '^DB_PASSWORD +keyring://app/db_password +ok$'
+stdout '^MISSING +keyring://app/missing +not found: '
+! stdout PLAIN
+no-canary
+
+exit-code 0 secretref check --env-file ok.env
+stdout '^API_KEY +gcp-sm://my-project/api-key +ok$'
+no-canary
+
+# run reports the same failure on stderr and starts nothing.
+exit-code 3 secretref run -- printenv-helper MISSING
+stderr '^secretref: MISSING  keyring://app/missing  not found: '
+! exists child-env.txt
+no-canary
+
+-- .env --
+PLAIN=x
+# secretref: keyring://app/db_password
+DB_PASSWORD=localdev
+# secretref: keyring://app/missing
+MISSING=fallback
+-- ok.env --
+# secretref: gcp-sm://my-project/api-key
+API_KEY=dev-key

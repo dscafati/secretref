@@ -1,0 +1,23 @@
+# In compose mode secretref forwards signals to the child and keeps running
+# until the child exits. With a controlling terminal in the foreground,
+# secretref leaves SIGINT to the terminal (it never sends it twice), so the
+# test checks SIGTERM, which is always forwarded.
+[windows] skip 'testscript cannot send signals on Windows'
+! exec secretref run -- docker compose -wait-signal DB_PASSWORD &sr&
+waitfile ready
+[!controlling-tty] kill -INT sr
+[controlling-tty] term-bg
+wait sr
+[!controlling-tty] grep '^interrupt$' got-signal.txt
+[controlling-tty] grep '^terminated$' got-signal.txt
+no-canary
+no-override
+
+-- .env --
+# secretref: keyring://app/db_password
+DB_PASSWORD=localdev
+-- compose.yaml --
+services:
+  web:
+    image: alpine
+    env_file: .env

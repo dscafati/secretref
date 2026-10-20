@@ -1,0 +1,8 @@
+# A command that is not on the PATH exits 127.
+exit-code 127 secretref run -- secretref-no-such-command
+stderr '^secretref: command not found: secretref-no-such-command$'
+no-canary
+
+-- .env --
+# secretref: keyring://app/db_password
+DB_PASSWORD=localdev

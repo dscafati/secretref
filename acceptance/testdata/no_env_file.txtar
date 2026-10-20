@@ -1,0 +1,16 @@
+# Without .env or .env.local secretref exits 2.
+mkdir empty
+cd empty
+exit-code 2 secretref run -- printenv-helper DB_PASSWORD
+stderr '^secretref: no \.env or \.env\.local found in '
+! exists child-env.txt
+no-canary
+
+# A missing --env-file is a usage error too.
+cd ..
+exit-code 2 secretref run --env-file missing.env -- printenv-helper DB_PASSWORD
+no-canary
+
+-- .env --
+# secretref: keyring://app/db_password
+DB_PASSWORD=localdev

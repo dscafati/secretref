@@ -1,0 +1,10 @@
+# An annotation without a variable directly below it fails with file:line.
+exit-code 2 secretref run -- printenv-helper DB_PASSWORD
+stderr '^secretref: \.env:1: annotation has no variable directly below it$'
+! exists child-env.txt
+no-canary
+
+-- .env --
+# secretref: keyring://app/db_password
+
+DB_PASSWORD=localdev

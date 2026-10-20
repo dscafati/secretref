@@ -1,0 +1,11 @@
+# The child's exit code is secretref's exit code.
+exit-code 5 secretref run -- printenv-helper -exit 5 DB_PASSWORD
+grep '^DB_PASSWORD=SR_CANARY_7f3a9c$' child-env.txt
+no-canary
+
+exit-code 0 secretref run -- printenv-helper DB_PASSWORD
+no-canary
+
+-- .env --
+# secretref: keyring://app/db_password
+DB_PASSWORD=localdev

@@ -1,0 +1,12 @@
+# CRLF env files parse, and arguments with spaces reach the child intact.
+crlf env.lf .env
+exec secretref run -- printenv-helper -args DB_PASSWORD 'two words' PLAIN
+grep '^DB_PASSWORD=SR_CANARY_7f3a9c$' child-env.txt
+grep '^PLAIN=crlf$' child-env.txt
+grep '^two words$' child-args.txt
+no-canary
+
+-- env.lf --
+# secretref: keyring://app/db_password
+DB_PASSWORD=localdev
+PLAIN=crlf

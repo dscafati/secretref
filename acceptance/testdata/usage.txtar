@@ -1,0 +1,21 @@
+# A command without -- before it is a usage error and starts nothing.
+exit-code 2 secretref run printenv-helper DB_PASSWORD
+stderr 'run needs -- followed by a command'
+! exists child-env.txt
+no-canary
+
+exit-code 2 secretref run --
+no-canary
+
+exit-code 2 secretref set aws-sm://eu-west-1/prod/db
+stderr 'only keyring://'
+no-canary
+
+# Deleting a keyring item that does not exist exits 3.
+exit-code 3 secretref delete keyring://app/nothing
+stderr '^secretref: keyring://app/nothing: not found$'
+no-canary
+
+-- .env --
+# secretref: keyring://app/db_password
+DB_PASSWORD=localdev

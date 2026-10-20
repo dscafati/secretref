@@ -1,0 +1,17 @@
+# A variable already in the environment wins and is not resolved; .env.local
+# overrides .env.
+env DB_PASSWORD=from-env
+exec secretref run -- printenv-helper DB_PASSWORD API_KEY LEVEL
+grep '^DB_PASSWORD=from-env$' child-env.txt
+grep '^API_KEY=SR_CANARY_7f3a9c$' child-env.txt
+grep '^LEVEL=local$' child-env.txt
+no-canary
+
+-- .env --
+# secretref: keyring://app/db_password
+DB_PASSWORD=localdev
+# secretref: gcp-sm://my-project/api-key
+API_KEY=dev-key
+LEVEL=base
+-- .env.local --
+LEVEL=local
