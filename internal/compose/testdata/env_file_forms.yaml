@@ -1,0 +1,19 @@
+services:
+  string_form:
+    image: alpine
+    env_file: .env
+  list_form:
+    image: alpine
+    env_file:
+      - other.env
+      - .env.local
+  object_form:
+    image: alpine
+    env_file:
+      - path: ./.env
+        required: false
+  unrelated:
+    image: alpine
+    env_file: unrelated.env
+  no_env_file:
+    image: alpine
