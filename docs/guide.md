@@ -332,7 +332,9 @@ secretref run -- docker compose up
 1. secretref finds the compose files the way Compose does: the `-f` flags,
    else `COMPOSE_FILE`, else the default file names (`compose.yaml`,
    `compose.yml`, `docker-compose.yaml`, `docker-compose.yml`) in the current
-   directory or a parent directory.
+   directory or a parent directory. secretref reads `COMPOSE_FILE` and
+   `COMPOSE_PATH_SEPARATOR` only from the environment it started in, never
+   from an env file, because an env-file value can be built from a secret.
 2. It finds the services whose `env_file:` lists a file that secretref loaded.
 3. It writes a temporary override file with mode 0600. The file holds names
    only, in the form `KEY: ${KEY}`. It never holds a value.
@@ -354,6 +356,8 @@ Limits:
   secretref runs the command as an ordinary command.
 - Variables that were already set in the environment are not added to the
   override. Compose reads those from `env_file:` as usual.
+- `COMPOSE_FILE` set in an env file does not choose the compose files. secretref
+  prints a warning; set it in your shell or pass `-f` instead.
 
 `docker compose config` prints the resolved values. Its stdout belongs to
 Compose, not to secretref. See [SECURITY.md](../SECURITY.md).

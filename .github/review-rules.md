@@ -7,6 +7,11 @@ Used by human and automated reviewers. Rules come from [AGENTS.md](../AGENTS.md)
 
 - A resolved value reaching stdout, stderr, a log, an error message, or a file.
 - A value type other than `secret.Secret` carrying a resolved value.
+- A decision that reads an env-file value, such as which files to open or how to
+  split a list. Env-file values can be built from a secret; read such settings
+  from the environment secretref started with.
+- An error message that holds an environment-derived string or a path built from
+  one. Name the variable instead, as in `compose file 2 in COMPOSE_FILE`.
 - Code that overrides or resolves a variable already present in the process environment.
 - `set` or `delete` accepting a scheme other than `keyring://`.
 - A new provider, flag, or env var not covered by an ADR.

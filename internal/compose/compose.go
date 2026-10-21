@@ -13,7 +13,10 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-const composeFileVar = "COMPOSE_FILE"
+const (
+	composeFileVar   = "COMPOSE_FILE"
+	pathSeparatorVar = "COMPOSE_PATH_SEPARATOR"
+)
 
 // Detect reports whether argv is a docker compose invocation: argv[0] has base
 // name docker (or docker.exe) and compose is its first argument after docker's
@@ -72,6 +75,9 @@ type Plan struct {
 	// Override is the path of the override file, or "" when no service uses
 	// a loaded env file and nothing was written.
 	Override string
+	// Warnings are messages for stderr. They hold variable names, never
+	// values.
+	Warnings []string
 }
 
 // Input is what Prepare reads.
@@ -80,7 +86,9 @@ type Input struct {
 	Argv []string
 	// Environ is the environment the child gets.
 	Environ []string
-	// Parent is the environment secretref itself started with.
+	// Parent is the environment secretref itself started with. COMPOSE_FILE
+	// and COMPOSE_PATH_SEPARATOR are read from here only, never from Environ,
+	// which holds env-file values that can be built from a secret.
 	Parent []string
 	// Keys maps each env file secretref loaded to the keys it passes to the
 	// services that list that file in env_file.
@@ -96,10 +104,16 @@ type Input struct {
 // When no service matches, the Plan carries in.Argv and in.Environ unchanged
 // and no file is written.
 func Prepare(ctx context.Context, in Input) (Plan, error) {
-	argv, environ, cwd := in.Argv, in.Environ, in.Cwd
-	unchanged := Plan{Args: argv, Env: environ, Cleanup: func() error { return nil }}
+	argv, environ, parent, cwd := in.Argv, in.Environ, in.Parent, in.Cwd
 	inv := parseArgs(argv)
-	files, err := composeFiles(inv, environ, cwd)
+	var warnings []string
+	if _, inParent := envValue(parent, composeFileVar); !inParent && inv.lastFileEnd == 0 {
+		if _, inChild := envValue(environ, composeFileVar); inChild {
+			warnings = append(warnings, "ignoring "+composeFileVar+" from an env file; set it in the environment or pass -f")
+		}
+	}
+	unchanged := Plan{Args: argv, Env: environ, Cleanup: func() error { return nil }, Warnings: warnings}
+	files, err := composeFiles(inv, parent, cwd)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -118,7 +132,7 @@ func Prepare(ctx context.Context, in Input) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
-	plan := Plan{Args: argv, Env: environ, Cleanup: func() error { return os.Remove(path) }, Override: path}
+	plan := Plan{Args: argv, Env: environ, Cleanup: func() error { return os.Remove(path) }, Override: path, Warnings: warnings}
 	if inv.lastFileEnd > 0 {
 		args := slices.Clone(argv[:inv.lastFileEnd])
 		args = append(args, "-f", path)
@@ -126,11 +140,19 @@ func Prepare(ctx context.Context, in Input) (Plan, error) {
 		plan.Args = args
 		return plan, nil
 	}
-	orig, ok := envValue(environ, composeFileVar)
+	// Compose reads both variables from its environment, and from the
+	// project's .env when they are unset there. Setting both makes compose
+	// split COMPOSE_FILE the way secretref built it.
+	sep := pathSeparator(parent)
+	orig, ok := envValue(parent, composeFileVar)
 	if !ok || orig == "" {
-		orig = strings.Join(files, pathSeparator(environ))
+		paths := make([]string, len(files))
+		for i, f := range files {
+			paths[i] = f.path
+		}
+		orig = strings.Join(paths, sep)
 	}
-	plan.Env = setEnv(environ, composeFileVar, orig+pathSeparator(environ)+path)
+	plan.Env = setEnv(setEnv(environ, composeFileVar, orig+sep+path), pathSeparatorVar, sep)
 	return plan, nil
 }
 

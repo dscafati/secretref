@@ -397,3 +397,59 @@ func TestPrepareStopsOnCanceledContext(t *testing.T) {
 		t.Fatalf("Prepare error = %v, want context.Canceled", err)
 	}
 }
+
+func TestComposeSettingsComeFromParentOnly(t *testing.T) {
+	// An env file can set COMPOSE_FILE and COMPOSE_PATH_SEPARATOR, even to
+	// text built from a secret. secretref decides from the parent
+	// environment only, and pins both for compose when it sets COMPOSE_FILE.
+	dir := project(t, map[string]string{"compose.yaml": simpleCompose})
+	sep := string(os.PathListSeparator)
+	keys := map[string][]string{filepath.Join(dir, ".env"): {"A"}}
+	plan, path := prepareInput(t, compose.Input{
+		Argv:    []string{"docker", "compose", "up"},
+		Environ: []string{"PATH=/bin", "COMPOSE_FILE=x" + canary, "COMPOSE_PATH_SEPARATOR=,"},
+		Parent:  []string{"PATH=/bin"},
+		Keys:    keys,
+		Cwd:     dir,
+	})
+	if path == "" {
+		t.Fatal("no override written")
+	}
+	got, _ := envGet(plan.Env, "COMPOSE_FILE")
+	if want := filepath.Join(dir, "compose.yaml") + sep + path; got != want {
+		t.Errorf("COMPOSE_FILE = %q, want %q", got, want)
+	}
+	if got, _ := envGet(plan.Env, "COMPOSE_PATH_SEPARATOR"); got != sep {
+		t.Errorf("COMPOSE_PATH_SEPARATOR = %q, want %q", got, sep)
+	}
+	if !slices.ContainsFunc(plan.Warnings, func(w string) bool { return strings.Contains(w, "COMPOSE_FILE") }) {
+		t.Errorf("Warnings = %q, want one naming COMPOSE_FILE", plan.Warnings)
+	}
+	for _, w := range plan.Warnings {
+		if strings.Contains(w, canary) {
+			t.Errorf("warning leaks an env-file value: %q", w)
+		}
+	}
+}
+
+func TestComposeFileErrorsNameTheVariable(t *testing.T) {
+	// Paths from COMPOSE_FILE never appear in an error; the error names the
+	// variable instead.
+	dir := project(t, map[string]string{canary + "-bad.yaml": "services: [\n"})
+	keys := map[string][]string{filepath.Join(dir, ".env"): {"A"}}
+	for name, file := range map[string]string{"missing": canary + ".yaml", "invalid": canary + "-bad.yaml"} {
+		t.Run(name, func(t *testing.T) {
+			useTempDir(t)
+			env := []string{"COMPOSE_FILE=" + file}
+			_, err := compose.Prepare(context.Background(), compose.Input{
+				Argv: []string{"docker", "compose", "up"}, Environ: env, Parent: env, Keys: keys, Cwd: dir,
+			})
+			if err == nil {
+				t.Fatal("want error")
+			}
+			if msg := err.Error(); strings.Contains(msg, canary) || !strings.Contains(msg, "COMPOSE_FILE") {
+				t.Errorf("error = %q, want it to name COMPOSE_FILE and not the path", msg)
+			}
+		})
+	}
+}
