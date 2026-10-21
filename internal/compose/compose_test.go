@@ -410,7 +410,7 @@ func TestComposeSettingsComeFromParentOnly(t *testing.T) {
 		Environ:  []string{"PATH=/bin", "COMPOSE_FILE=x" + canary, "COMPOSE_PATH_SEPARATOR=,"},
 		Parent:   []string{"PATH=/bin"},
 		Keys:     keys,
-		FileKeys: []string{"A", "COMPOSE_FILE", "COMPOSE_PATH_SEPARATOR"},
+		FileKeys: map[string]string{"A": envFile, "COMPOSE_FILE": envFile, "COMPOSE_PATH_SEPARATOR": envFile},
 		Cwd:      dir,
 	})
 	if path == "" {
@@ -537,6 +537,9 @@ func TestKeysComposeCannotSubstituteAreSkipped(t *testing.T) {
 	}
 }
 
+// envFile is the env file the tests say defined a compose setting.
+const envFile = "/p/.env"
+
 // countEnv returns how many entries of env set key.
 func countEnv(env []string, key string) int {
 	n := 0
@@ -563,7 +566,7 @@ func TestFileComposeFileIsReplacedWithAWarning(t *testing.T) {
 		Environ:  []string{"PATH=/bin", "A=" + canary},
 		Parent:   []string{"PATH=/bin"},
 		Keys:     map[string][]string{filepath.Join(dir, ".env"): {"A"}},
-		FileKeys: []string{"COMPOSE_FILE", "A"},
+		FileKeys: map[string]string{"COMPOSE_FILE": envFile, "A": envFile},
 		Cwd:      dir,
 	})
 	if path == "" {
@@ -584,7 +587,7 @@ func TestFileComposeFileWithoutOverride(t *testing.T) {
 	// chose, or drops the variable when it found none.
 	sep := string(os.PathListSeparator)
 	environ := []string{"PATH=/bin", "COMPOSE_FILE=x" + canary, "COMPOSE_PATH_SEPARATOR=,"}
-	fileKeys := []string{"COMPOSE_FILE", "COMPOSE_PATH_SEPARATOR"}
+	fileKeys := map[string]string{"COMPOSE_FILE": envFile, "COMPOSE_PATH_SEPARATOR": envFile}
 	keys := map[string][]string{"/elsewhere/.env": {"A"}}
 
 	dir := project(t, map[string]string{"compose.yaml": simpleCompose})
@@ -607,19 +610,39 @@ func TestFileComposeFileWithoutOverride(t *testing.T) {
 	if !warnsAbout(plan.Warnings, "COMPOSE_FILE") {
 		t.Errorf("Warnings = %q, want one naming COMPOSE_FILE", plan.Warnings)
 	}
+}
 
-	empty := t.TempDir()
-	plan, _ = prepareInput(t, compose.Input{
-		Argv: []string{"docker", "compose", "up"}, Environ: environ, Parent: []string{"PATH=/bin"},
-		Keys: keys, FileKeys: fileKeys, Cwd: empty,
-	})
-	for _, k := range fileKeys {
-		if v, ok := envGet(plan.Env, k); ok {
-			t.Errorf("%s = %q, want it removed", k, v)
-		}
+func TestFileComposeSettingWithoutComposeFileIsRefused(t *testing.T) {
+	// With no compose file found and no -f, compose would read COMPOSE_FILE
+	// from .env itself and could expand it against the secret. secretref
+	// refuses, naming the variable and the env file only.
+	environ := []string{"PATH=/bin", "COMPOSE_FILE=x" + canary, "COMPOSE_PATH_SEPARATOR=,"}
+	keys := map[string][]string{"/elsewhere/.env": {"A"}}
+	tests := map[string]struct {
+		fileKeys map[string]string
+		wantVar  string
+	}{
+		"COMPOSE_FILE":           {map[string]string{"COMPOSE_FILE": envFile, "COMPOSE_PATH_SEPARATOR": "/p/.env.local"}, "COMPOSE_FILE"},
+		"COMPOSE_PATH_SEPARATOR": {map[string]string{"COMPOSE_PATH_SEPARATOR": "/p/.env.local"}, "COMPOSE_PATH_SEPARATOR"},
 	}
-	if !warnsAbout(plan.Warnings, "COMPOSE_FILE") {
-		t.Errorf("Warnings = %q, want one naming COMPOSE_FILE", plan.Warnings)
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			useTempDir(t)
+			_, err := compose.Prepare(context.Background(), compose.Input{
+				Argv: []string{"docker", "compose", "up"}, Environ: environ, Parent: []string{"PATH=/bin"},
+				Keys: keys, FileKeys: tt.fileKeys, Cwd: t.TempDir(),
+			})
+			var fe *compose.FileSettingError
+			if !errors.As(err, &fe) {
+				t.Fatalf("Prepare error = %v, want a *compose.FileSettingError", err)
+			}
+			if fe.Var != tt.wantVar || fe.File != tt.fileKeys[tt.wantVar] {
+				t.Errorf("error names %s in %s, want %s in %s", fe.Var, fe.File, tt.wantVar, tt.fileKeys[tt.wantVar])
+			}
+			if strings.Contains(err.Error(), canary) {
+				t.Errorf("error leaks a value: %q", err)
+			}
+		})
 	}
 }
 
@@ -631,7 +654,7 @@ func TestFileComposeFileWithFileFlags(t *testing.T) {
 	plan, _ := prepareInput(t, compose.Input{
 		Argv: []string{"docker", "compose", "-f", "one.yaml", "up"}, Environ: environ,
 		Keys:     map[string][]string{filepath.Join(dir, ".env"): {"A"}},
-		FileKeys: []string{"COMPOSE_FILE", "COMPOSE_PATH_SEPARATOR"}, Cwd: dir,
+		FileKeys: map[string]string{"COMPOSE_FILE": envFile, "COMPOSE_PATH_SEPARATOR": envFile}, Cwd: dir,
 	})
 	for _, k := range []string{"COMPOSE_FILE", "COMPOSE_PATH_SEPARATOR"} {
 		if v, ok := envGet(plan.Env, k); ok {
@@ -650,7 +673,7 @@ func TestParentComposeFileWinsSilently(t *testing.T) {
 	plan, path := prepareInput(t, compose.Input{
 		Argv: []string{"docker", "compose", "up"}, Environ: env, Parent: env,
 		Keys:     map[string][]string{filepath.Join(dir, ".env"): {"A"}},
-		FileKeys: []string{"COMPOSE_FILE"}, Cwd: dir,
+		FileKeys: map[string]string{"COMPOSE_FILE": envFile}, Cwd: dir,
 	})
 	if got, _ := envGet(plan.Env, "COMPOSE_FILE"); got != "compose.yaml"+string(os.PathListSeparator)+path {
 		t.Errorf("COMPOSE_FILE = %q", got)

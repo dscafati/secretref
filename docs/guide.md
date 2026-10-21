@@ -478,7 +478,9 @@ Limits:
   `COMPOSE_PATH_SEPARATOR` that come from an env file from Compose's
   environment. Without `-f` it sets `COMPOSE_FILE` to the files it found (plus
   the override), so Compose does not read the value from `.env` either, and
-  prints a warning that names the variable. Set `COMPOSE_FILE` in your shell or
+  prints a warning that names the variable. If it finds no compose file and
+  you passed no `-f`, Compose would read the value from `.env` itself, so
+  secretref stops with exit 2 instead. Set `COMPOSE_FILE` in your shell or
   pass `-f` instead.
 - Variables named `COMPOSE_*` are Compose's own settings. They never go in the
   override.

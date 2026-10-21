@@ -83,6 +83,21 @@ type Plan struct {
 	Warnings []string
 }
 
+// FileSettingError reports a compose setting defined in an env file when no
+// compose file was found and no -f was given. It holds names only.
+type FileSettingError struct {
+	Var  string // COMPOSE_FILE or COMPOSE_PATH_SEPARATOR
+	File string // the env file that defines it
+}
+
+// Error implements error.
+//
+// SECURITY: the message names the variable and the env file, never the value.
+func (e *FileSettingError) Error() string {
+	return fmt.Sprintf("compose: %s is set in %s but no compose file was found; pass -f or remove %s from the env file",
+		e.Var, e.File, e.Var)
+}
+
 // Input is what Prepare reads.
 type Input struct {
 	// Argv is the command line, starting with docker.
@@ -96,10 +111,10 @@ type Input struct {
 	// Keys maps each env file secretref loaded to the keys it passes to the
 	// services that list that file in env_file.
 	Keys map[string][]string
-	// FileKeys names every key defined in the loaded env files. Prepare uses
-	// the names only, to tell whether COMPOSE_FILE or COMPOSE_PATH_SEPARATOR
-	// came from a file.
-	FileKeys []string
+	// FileKeys maps every key defined in the loaded env files to the last
+	// file that defines it. Prepare uses names only, to tell whether
+	// COMPOSE_FILE or COMPOSE_PATH_SEPARATOR came from a file.
+	FileKeys map[string]string
 	// Cwd is the working directory.
 	Cwd string
 }
@@ -120,11 +135,16 @@ func Prepare(ctx context.Context, in Input) (Plan, error) {
 	argv, parent, cwd := in.Argv, in.Parent, in.Cwd
 	inv := parseArgs(argv)
 	environ := in.Environ
-	fromFile := map[string]bool{}
+	fromFile := map[string]string{} // setting to the env file that defines it
 	for _, k := range []string{composeFileVar, pathSeparatorVar} {
-		if _, inParent := envValue(parent, k); !inParent && slices.ContainsFunc(in.FileKeys, func(f string) bool { return sameKey(f, k) }) {
-			fromFile[k] = true
-			environ = unsetEnv(environ, k)
+		if _, inParent := envValue(parent, k); inParent {
+			continue
+		}
+		for name, file := range in.FileKeys {
+			if sameKey(name, k) {
+				fromFile[k] = file
+				environ = unsetEnv(environ, k)
+			}
 		}
 	}
 	// pin sets COMPOSE_FILE to list, split the way secretref split it.
@@ -133,7 +153,8 @@ func Prepare(ctx context.Context, in Input) (Plan, error) {
 		return setEnv(setEnv(env, composeFileVar, list), pathSeparatorVar, sep)
 	}
 	var warnings []string
-	pinFiles := fromFile[composeFileVar] && inv.lastFileEnd == 0
+	_, fileComposeFile := fromFile[composeFileVar]
+	pinFiles := fileComposeFile && inv.lastFileEnd == 0
 	if pinFiles {
 		warnings = append(warnings, "ignoring "+composeFileVar+" from an env file; set it in the environment or pass -f")
 	}
@@ -157,6 +178,13 @@ func Prepare(ctx context.Context, in Input) (Plan, error) {
 		unchanged.Env = pin(environ, chosen())
 	}
 	if len(files) == 0 {
+		// Nothing to pin, and compose would read the setting from .env
+		// itself, expanded against an environment that holds secrets.
+		for _, k := range []string{composeFileVar, pathSeparatorVar} {
+			if file, ok := fromFile[k]; ok && inv.lastFileEnd == 0 {
+				return Plan{}, &FileSettingError{Var: k, File: file}
+			}
+		}
 		return unchanged, nil
 	}
 	services, matched, err := matchServices(ctx, files, projectDir(inv, files, cwd), absKeys(in.Keys, cwd))

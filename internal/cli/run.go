@@ -127,7 +127,13 @@ func runCompose(ctx context.Context, d Deps, in compose.Input) (err error) {
 	received, stop := procexec.Hold()
 	defer stop()
 	plan, err := compose.Prepare(ctx, in)
-	if err != nil {
+	var fse *compose.FileSettingError
+	switch {
+	case errors.As(err, &fse):
+		shown := *fse
+		shown.File = relPath(in.Cwd, fse.File)
+		return usageError("%s", shown.Error())
+	case err != nil:
 		return internalError(err)
 	}
 	defer func() {
@@ -236,12 +242,12 @@ func keysByFile(res resolve.Result, all bool) map[string][]string {
 	return out
 }
 
-// entryKeys returns the key of every entry, for compose to tell which
-// settings came from a file. Values stay out.
-func entryKeys(entries []envfile.Entry) []string {
-	keys := make([]string, len(entries))
-	for i, e := range entries {
-		keys[i] = e.Key
+// entryKeys maps the key of every entry to the last file that defines it,
+// for compose to tell which settings came from a file. Values stay out.
+func entryKeys(entries []envfile.Entry) map[string]string {
+	keys := make(map[string]string, len(entries))
+	for _, e := range entries {
+		keys[e.Key] = e.File
 	}
 	return keys
 }
