@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/credentials"
 
@@ -212,6 +213,29 @@ func TestUnreachableEndpointIsUnavailable(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "endpoint unreachable") {
 		t.Fatalf("error = %q", err.Error())
+	}
+}
+
+// TestContextDeadlineStaysInChain checks that an expired context is reported
+// as such, so the resolver can say "timed out" instead of "unreachable".
+func TestContextDeadlineStaysInChain(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		<-release
+		_, _ = w.Write([]byte(canaryBody))
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(release) })
+	p := testProvider(t, srv)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	_, err := p.Resolve(ctx, mustRef(t, "aws-sm://us-east-1/db"))
+	if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, provider.ErrUnavailable) {
+		t.Fatalf("error = %v, want it to wrap context.DeadlineExceeded and unavailable", err)
+	}
+	if strings.Contains(err.Error(), canaryBody) || strings.Contains(err.Error(), srv.URL) {
+		t.Fatalf("error text leaks transport details: %q", err.Error())
 	}
 }
 

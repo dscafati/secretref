@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/dscafati/secretref/internal/provider"
 	"github.com/dscafati/secretref/internal/ref"
@@ -29,6 +30,23 @@ func TestKind(t *testing.T) {
 		if got := provider.Kind(tt.err); got != tt.want {
 			t.Errorf("Kind(%v) = %q, want %q", tt.err, got, tt.want)
 		}
+	}
+}
+
+func TestInterrupted(t *testing.T) {
+	if err := provider.Interrupted(context.Background()); err != nil {
+		t.Fatalf("Interrupted(live ctx) = %v, want nil", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := provider.Interrupted(ctx)
+	if !errors.Is(err, context.Canceled) || !errors.Is(err, provider.ErrUnavailable) {
+		t.Fatalf("Interrupted(canceled) = %v, want context.Canceled and unavailable", err)
+	}
+	ctx, cancel = context.WithDeadline(context.Background(), time.Unix(0, 0))
+	defer cancel()
+	if err := provider.Interrupted(ctx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Interrupted(expired) = %v, want context.DeadlineExceeded", err)
 	}
 }
 

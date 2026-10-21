@@ -1,6 +1,10 @@
 package provider
 
-import "errors"
+import (
+	"context"
+	"errors"
+	"fmt"
+)
 
 // Sentinel error kinds. Provider errors wrap one of these with %w.
 var (
@@ -24,4 +28,15 @@ func Kind(err error) string {
 		return ErrInvalid.Error()
 	}
 	return "error"
+}
+
+// Interrupted returns nil while ctx is live. Once ctx is done it returns an
+// error that wraps both ctx.Err() and ErrUnavailable, so the resolver can
+// report a timeout or cancellation instead of a generic backend failure.
+// Providers check it before classifying a transport error.
+func Interrupted(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("%w: %w", err, ErrUnavailable)
+	}
+	return nil
 }

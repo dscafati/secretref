@@ -188,6 +188,51 @@ func TestTimeoutIsUnavailable(t *testing.T) {
 	}
 }
 
+// TestContextDeadlineStaysInChain checks that an expired context is reported
+// as such, so the resolver can say "timed out" instead of "request failed".
+func TestContextDeadlineStaysInChain(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		<-release
+		_, _ = w.Write([]byte(canaryBody))
+	}))
+	defer srv.Close()
+	defer close(release)
+	p := gcpsm.New(gcpsm.Options{BaseURL: srv.URL, HTTPClient: srv.Client()})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	_, err := p.Resolve(ctx, mustRef(t, "gcp-sm://proj/db"))
+	if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, provider.ErrUnavailable) {
+		t.Fatalf("error = %v, want it to wrap context.DeadlineExceeded and unavailable", err)
+	}
+	if strings.Contains(err.Error(), canaryBody) || strings.Contains(err.Error(), srv.URL) {
+		t.Fatalf("error text leaks transport details: %q", err.Error())
+	}
+}
+
+// TestDeadlineWhileReadingBody covers a deadline that passes after the status
+// line arrived but before the body did.
+func TestDeadlineWhileReadingBody(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"payload":`))
+		w.(http.Flusher).Flush()
+		<-release
+	}))
+	defer srv.Close()
+	defer close(release)
+	p := gcpsm.New(gcpsm.Options{BaseURL: srv.URL, HTTPClient: srv.Client()})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	_, err := p.Resolve(ctx, mustRef(t, "gcp-sm://proj/db"))
+	if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, provider.ErrUnavailable) {
+		t.Fatalf("error = %v, want it to wrap context.DeadlineExceeded and unavailable", err)
+	}
+}
+
 func TestMalformedPayloadIsInvalid(t *testing.T) {
 	for _, body := range []string{`not json`, `{"payload":{"data":"!!!"}}`} {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

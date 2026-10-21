@@ -79,6 +79,9 @@ func (p *Provider) Resolve(ctx context.Context, r ref.Ref) (secret.Secret, error
 	}
 	client, err := p.client(ctx, r.Location, r.Opts["profile"])
 	if err != nil {
+		if ierr := provider.Interrupted(ctx); ierr != nil {
+			return secret.Secret{}, ierr
+		}
 		return secret.Secret{}, fmt.Errorf("%s: %w", configReason(err), provider.ErrInvalid)
 	}
 	out, err := client.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
@@ -158,8 +161,13 @@ func mapError(ctx context.Context, err error) error {
 		code := api.ErrorCode()
 		return fmt.Errorf("AWS error %s: %w", code, kindForCode(code, err))
 	}
+	// The SDK error is dropped below, so keep the context's own error: it is
+	// what lets the resolver say "timed out" rather than "unreachable".
+	if ierr := provider.Interrupted(ctx); ierr != nil {
+		return ierr
+	}
 	var ce *credentialsError
-	if errors.As(err, &ce) && ctx.Err() == nil {
+	if errors.As(err, &ce) {
 		return fmt.Errorf("%s: %w", noCredsMessage, provider.ErrDenied)
 	}
 	return fmt.Errorf("endpoint unreachable: %w", provider.ErrUnavailable)

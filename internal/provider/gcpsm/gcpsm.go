@@ -85,7 +85,11 @@ func (p *Provider) Resolve(ctx context.Context, r ref.Ref) (secret.Secret, error
 		if errors.As(err, &re) {
 			return secret.Secret{}, fmt.Errorf("%s: %w", noADCMessage, provider.ErrDenied)
 		}
-		// The *url.Error text holds the URL only, never the response.
+		// The *url.Error is dropped, so keep the context's own error: it is
+		// what lets the resolver say "timed out" rather than "request failed".
+		if ierr := provider.Interrupted(ctx); ierr != nil {
+			return secret.Secret{}, ierr
+		}
 		return secret.Secret{}, fmt.Errorf("request failed: %w", provider.ErrUnavailable)
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -101,6 +105,9 @@ func (p *Provider) Resolve(ctx context.Context, r ref.Ref) (secret.Secret, error
 		} `json:"payload"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBody*2)).Decode(&body); err != nil {
+		if ierr := provider.Interrupted(ctx); ierr != nil {
+			return secret.Secret{}, ierr
+		}
 		return secret.Secret{}, fmt.Errorf("malformed response: %w", provider.ErrInvalid)
 	}
 	data, err := base64.StdEncoding.DecodeString(body.Payload.Data)
