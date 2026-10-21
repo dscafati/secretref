@@ -562,7 +562,7 @@ func composeOverride(h *harness, args ...string) map[string][]string {
 	h.duringRun = func(s started) {
 		v, _ := envOf(s.env, "COMPOSE_FILE")
 		parts := strings.Split(v, string(os.PathListSeparator))
-		data, err := os.ReadFile(parts[len(parts)-1]) //nolint:gosec // G304: the override path the code under test created.
+		data, err := os.ReadFile(parts[len(parts)-1])
 		if err != nil {
 			h.t.Fatalf("override not readable: %v", err)
 		}
