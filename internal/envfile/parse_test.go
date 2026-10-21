@@ -44,7 +44,7 @@ func render(entries []Entry) []byte {
 	}
 	b, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
-		panic(err)
+		panic(err) //nolint:forbidigo // golden-file generator in a test helper cannot take *testing.T; the panic surfaces a test setup bug
 	}
 	return append(b, '\n')
 }

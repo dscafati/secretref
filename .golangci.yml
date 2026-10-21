@@ -20,6 +20,7 @@ linters:
     - depguard
     - forbidigo
     - gochecknoglobals
+    - gochecknoinits
   settings:
     nolintlint:
       require-specific: true
@@ -27,6 +28,7 @@ linters:
     revive:
       rules:
         - name: exported
+        - name: context-as-argument
     depguard:
       rules:
         banned:
@@ -38,6 +40,8 @@ linters:
             - pkg: github.com/stretchr/testify
               desc: use stdlib testing and go-cmp
     forbidigo:
+      # Match on resolved types, so `import l "log"` and `import f "fmt"` are caught.
+      analyze-types: true
       forbid:
         - pattern: ^fmt\.Print
           msg: write to an injected io.Writer; stdout belongs to the child process
@@ -45,9 +49,13 @@ linters:
         - pattern: ^println$
         - pattern: ^log\.
           msg: use log/slog on stderr
+        - pattern: ^os\.(Stdout|Stderr)$
+          msg: write to an injected io.Writer; only cmd/ and internal/cli touch the process streams
+        - pattern: ^panic$
+          msg: return an error; panic is allowed only in cmd/ and internal/cli
   exclusions:
     rules:
-      - path: ^(internal/cli|cmd)/
+      - path: ^(internal/cli|cmd|acceptance)/
         linters:
           - forbidigo
 
