@@ -14,8 +14,14 @@ func newVersionCmd(d Deps) *cobra.Command {
 		Short: "Print the secretref version",
 		Args:  noArgs,
 		RunE: func(*cobra.Command, []string) error {
-			_, err := fmt.Fprintf(d.Stdout, "secretref %s\n", build.Version)
-			return err
+			return printVersion(d)
 		},
 	}
+}
+
+// printVersion writes the line that both the version command and the root
+// --version flag print.
+func printVersion(d Deps) error {
+	_, err := fmt.Fprintf(d.Stdout, "secretref %s\n", build.Resolve(d.ReadBuildInfo))
+	return err
 }

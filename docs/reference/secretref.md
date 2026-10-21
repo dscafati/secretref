@@ -15,7 +15,8 @@ secretref [flags]
 ### Options
 
 ```
-  -h, --help   help for secretref
+  -h, --help      help for secretref
+      --version   print the secretref version, same as 'secretref version'
 ```
 
 ### SEE ALSO

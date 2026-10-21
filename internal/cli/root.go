@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"io"
+	"runtime/debug"
 
 	"github.com/spf13/cobra"
 
@@ -28,6 +29,9 @@ type Deps struct {
 	Replace func(argv, env []string) error
 	// Spawn runs argv as a child and returns its exit code.
 	Spawn func(ctx context.Context, argv, env []string) (int, error)
+	// ReadBuildInfo returns the binary's build information, which holds the
+	// module version after go install. nil means there is none.
+	ReadBuildInfo func() (*debug.BuildInfo, bool)
 }
 
 // NewRoot returns the secretref command tree. It calls no Deps function, so
@@ -44,12 +48,19 @@ its environment. Values are never written to disk, stdout, or logs.`,
 		// The root runs only when no subcommand matched.
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if v, _ := cmd.Flags().GetBool("version"); v {
+				return printVersion(d)
+			}
 			if len(args) > 0 {
 				return usageError("unknown command %q; run 'secretref --help'", args[0])
 			}
 			return cmd.Help()
 		},
 	}
+	// --version is handled in RunE, not through cobra's Version field: that
+	// field needs the version while the tree is built, which would mean
+	// calling a Deps function here.
+	root.Flags().Bool("version", false, "print the secretref version, same as 'secretref version'")
 	root.SetIn(d.Stdin)
 	root.SetOut(d.Stdout)
 	root.SetErr(d.Stderr)

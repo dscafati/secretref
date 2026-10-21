@@ -1,0 +1,10 @@
+# --version prints exactly what the version command prints, to stdout.
+exec secretref version
+stdout '^secretref \S+\n$'
+! stderr .
+cp stdout version.txt
+
+exec secretref --version
+cmp stdout version.txt
+! stderr .
+no-canary

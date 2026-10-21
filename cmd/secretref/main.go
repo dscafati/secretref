@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime/debug"
 
 	"golang.org/x/term"
 
@@ -36,17 +37,18 @@ func run() int {
 
 	stdin := int(os.Stdin.Fd())
 	return cli.Execute(context.Background(), os.Args[1:], cli.Deps{
-		Registry:     reg,
-		Writers:      writers,
-		LookupEnv:    os.LookupEnv,
-		Environ:      os.Environ,
-		Getwd:        os.Getwd,
-		Stdin:        os.Stdin,
-		Stdout:       os.Stdout,
-		Stderr:       os.Stderr,
-		IsTerminal:   func() bool { return term.IsTerminal(stdin) },
-		ReadPassword: func() ([]byte, error) { return term.ReadPassword(stdin) },
-		Replace:      procexec.Replace,
-		Spawn:        procexec.Spawn,
+		Registry:      reg,
+		Writers:       writers,
+		LookupEnv:     os.LookupEnv,
+		Environ:       os.Environ,
+		Getwd:         os.Getwd,
+		Stdin:         os.Stdin,
+		Stdout:        os.Stdout,
+		Stderr:        os.Stderr,
+		IsTerminal:    func() bool { return term.IsTerminal(stdin) },
+		ReadPassword:  func() ([]byte, error) { return term.ReadPassword(stdin) },
+		Replace:       procexec.Replace,
+		Spawn:         procexec.Spawn,
+		ReadBuildInfo: debug.ReadBuildInfo,
 	})
 }
