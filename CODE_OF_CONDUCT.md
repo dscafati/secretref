@@ -64,6 +64,11 @@ GitHub security advisory at
 <https://github.com/dscafati/secretref/security/advisories/new>. All complaints
 will be reviewed and investigated promptly and fairly.
 
+GitHub has no private messages, so this project uses the private security
+advisory form as its private channel. Only maintainers can see a report sent
+there. The form is meant for vulnerabilities, so start the title with
+"Conduct:" and it will be handled as a conduct report, not a security issue.
+
 All community leaders are obligated to respect the privacy and security of the
 reporter of any incident.
 
