@@ -39,6 +39,10 @@ API_KEY=dev-key
 - A reference that does not parse is an error with the file and line, exit 2.
   The message does not repeat the annotation text, in case a secret was pasted
   there by mistake.
+- A reference is printable text. A control character, an invisible or
+  direction-changing character, or invalid UTF-8 makes it invalid. So does a
+  location or name segment that is `.` or `..`. See
+  [decision 0017](decisions/0017-printable-references-without-dot-segments.md).
 - The value after `=` is the fallback for people who run the app without
   secretref, and for `--allow-missing`. It may be empty.
 

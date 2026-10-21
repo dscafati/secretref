@@ -5,7 +5,10 @@ import (
 	"maps"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Ref is a parsed secret reference.
@@ -24,9 +27,10 @@ type Error struct {
 	Msg string
 }
 
-// Error implements error.
+// Error implements error. Raw is shown quoted and escaped when it holds a
+// character that is not printable.
 func (e *Error) Error() string {
-	return fmt.Sprintf("invalid reference %s: %s", e.Raw, e.Msg)
+	return fmt.Sprintf("invalid reference %s: %s", display(e.Raw), e.Msg)
 }
 
 // schemeOpts maps every supported scheme to the query keys a reference with
@@ -67,6 +71,12 @@ func Parse(s string) (Ref, error) {
 		return Ref{}, &Error{Raw: s, Msg: fmt.Sprintf(format, args...)}
 	}
 
+	// SECURITY: references are printed by check, run, set, and delete. A
+	// control character could drive the terminal, and invisible or
+	// direction-changing characters could disguise the reference.
+	if !printable(s) {
+		return fail("contains a control or non-printable character")
+	}
 	scheme, rest, ok := strings.Cut(s, "://")
 	if !ok {
 		return fail("missing scheme")
@@ -90,8 +100,14 @@ func Parse(s string) (Ref, error) {
 	if scheme != "aws-sm" && strings.Contains(name, "/") {
 		return fail("%s name must not contain \"/\"", scheme)
 	}
-	if scheme == "aws-sm" && slices.Contains(strings.Split(name, "/"), "") {
+	segments := append([]string{location}, strings.Split(name, "/")...)
+	if slices.Contains(segments, "") {
 		return fail("name must not have an empty path segment")
+	}
+	// SECURITY: providers build request paths from these segments; a "." or
+	// ".." segment would address a different resource.
+	if slices.Contains(segments, ".") || slices.Contains(segments, "..") {
+		return fail("location and name must not have a \".\" or \"..\" segment")
 	}
 
 	var opts map[string]string
@@ -110,6 +126,9 @@ func Parse(s string) (Ref, error) {
 			}
 			if len(v) != 1 || v[0] == "" {
 				return fail("query key %q needs exactly one non-empty value", k)
+			}
+			if !printable(v[0]) {
+				return fail("query key %q has a control or non-printable character", k)
 			}
 			opts[k] = v[0]
 		}
@@ -130,8 +149,34 @@ func Parse(s string) (Ref, error) {
 	}, nil
 }
 
-// String returns the reference as it was written.
-func (r Ref) String() string { return r.Raw }
+// String returns the reference as it was written. Parse accepts only
+// printable text; for a Ref built some other way, text that is not printable
+// is shown quoted and escaped, so the result cannot carry terminal escapes.
+func (r Ref) String() string { return display(r.Raw) }
+
+// printable reports whether s is valid UTF-8 made only of printable
+// characters (unicode.IsPrint), which excludes control, format, and invisible
+// characters.
+func printable(s string) bool {
+	if !utf8.ValidString(s) {
+		return false
+	}
+	for _, c := range s {
+		if !unicode.IsPrint(c) {
+			return false
+		}
+	}
+	return true
+}
+
+// display returns s unchanged when it is printable, and as a Go quoted string
+// otherwise.
+func display(s string) string {
+	if printable(s) {
+		return s
+	}
+	return strconv.Quote(s)
+}
 
 // isPositiveInt reports whether v is digits only, starts with 1-9.
 func isPositiveInt(v string) bool {

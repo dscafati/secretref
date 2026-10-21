@@ -228,7 +228,7 @@ func keysByFile(entries []envfile.Entry, res resolve.Result) map[string][]string
 
 // failureLine renders a failed key as "<key>  <ref>  <kind>[: <reason>]".
 func failureLine(f resolve.Failure) string {
-	return f.Key + "  " + f.Ref.Raw + "  " + describe(f.Err)
+	return f.Key + "  " + f.Ref.String() + "  " + describe(f.Err)
 }
 
 // describe renders a resolution error as "<kind>: <reason>". Provider errors
@@ -267,7 +267,7 @@ func newLogger(w io.Writer) *slog.Logger {
 func logResolved(log *slog.Logger, res resolve.Result) {
 	for _, v := range res.Vars {
 		if v.Ref != nil && !v.FromEnv && !v.FellBack {
-			log.Info(fmt.Sprintf("resolved %s from %s", v.Key, v.Ref.Raw))
+			log.Info(fmt.Sprintf("resolved %s from %s", v.Key, v.Ref.String()))
 		}
 	}
 }

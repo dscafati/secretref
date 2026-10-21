@@ -24,12 +24,12 @@ func newDeleteCmd(d Deps) *cobra.Command {
 			defer cancel()
 			err = w.Delete(ctx, r)
 			if errors.Is(err, provider.ErrNotFound) {
-				return &exitError{code: exitResolve, msg: r.Raw + ": not found"}
+				return &exitError{code: exitResolve, msg: r.String() + ": not found"}
 			}
 			if err != nil {
 				return writeFailed("delete", r, err)
 			}
-			_, _ = fmt.Fprintf(d.Stderr, "deleted %s\n", r.Raw)
+			_, _ = fmt.Fprintf(d.Stderr, "deleted %s\n", r.String())
 			return nil
 		},
 	}

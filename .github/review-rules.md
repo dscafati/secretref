@@ -17,6 +17,7 @@ Used by human and automated reviewers. Rules come from [AGENTS.md](../AGENTS.md)
 - Hand edits under `docs/reference/`.
 - Exported names without doc comments; `TODO` without an issue number.
 - `fmt.Print*`, `log.*`, `io/ioutil`, `pkg/errors`, or testify.
+- A reference printed from `Ref.Raw` or `ref.Error.Raw` instead of `Ref.String()` or the error, or other text from a file or argument printed without escaping control characters ([ADR 0017](../docs/decisions/0017-printable-references-without-dot-segments.md)).
 - Commit trailers naming an AI tool, or `Claude-Session:`.
 
 ## Do not flag

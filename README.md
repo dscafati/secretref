@@ -93,7 +93,8 @@ This example uses the OS keyring, so it needs no cloud account.
   as a JSON object and uses the top-level string field `<field>`. Example:
   `aws-sm://eu-west-1/prod/db?profile=dev#password`.
 - An `aws-sm` name may contain `/`. A `gcp-sm` secret and a `keyring` account
-  may not.
+  may not. No segment may be `.` or `..`, and a reference may not hold control
+  or invisible characters.
 - `aws-sm` reads the current version (`AWSCURRENT`) of a string secret. Binary
   secrets are not supported.
 
