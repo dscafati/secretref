@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/dscafati/secretref/internal/provider"
 	"github.com/dscafati/secretref/internal/ref"
@@ -32,6 +33,23 @@ func TestKind(t *testing.T) {
 	}
 }
 
+func TestInterrupted(t *testing.T) {
+	if err := provider.Interrupted(context.Background()); err != nil {
+		t.Fatalf("Interrupted(live ctx) = %v, want nil", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := provider.Interrupted(ctx)
+	if !errors.Is(err, context.Canceled) || !errors.Is(err, provider.ErrUnavailable) {
+		t.Fatalf("Interrupted(canceled) = %v, want context.Canceled and unavailable", err)
+	}
+	ctx, cancel = context.WithDeadline(context.Background(), time.Unix(0, 0))
+	defer cancel()
+	if err := provider.Interrupted(ctx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Interrupted(expired) = %v, want context.DeadlineExceeded", err)
+	}
+}
+
 type stubProvider struct{}
 
 func (stubProvider) Resolve(context.Context, ref.Ref) (secret.Secret, error) {
@@ -47,5 +65,9 @@ func TestRegistryLookupUnknown(t *testing.T) {
 	_, err := reg.Lookup("vault")
 	if !errors.Is(err, provider.ErrInvalid) {
 		t.Fatalf("Lookup(vault) error = %v, want it to wrap ErrInvalid", err)
+	}
+	// The caller prints the reference, which names the scheme.
+	if want := "no provider for this scheme: invalid"; err.Error() != want {
+		t.Fatalf("Lookup(vault) error = %q, want %q", err.Error(), want)
 	}
 }

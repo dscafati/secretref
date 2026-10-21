@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,7 +20,12 @@ import (
 	"github.com/dscafati/secretref/internal/ref"
 )
 
-const canaryBody = "CANARY-RESPONSE-BODY"
+const (
+	canaryBody = "CANARY-RESPONSE-BODY"
+	// noADCText is the whole error for missing or rejected credentials: the
+	// reason first and the kind last, without the reference.
+	noADCText = "no Google Application Default Credentials (run: gcloud auth application-default login): denied"
+)
 
 // backend is a minimal Secret Manager REST emulator.
 type backend struct {
@@ -160,6 +166,9 @@ func TestErrorMapping(t *testing.T) {
 			if strings.Contains(err.Error(), canaryBody) {
 				t.Fatalf("error text includes response body: %q", err.Error())
 			}
+			if want := fmt.Sprintf("HTTP %d from Secret Manager: %s", tt.status, tt.want); err.Error() != want {
+				t.Fatalf("error text = %q, want %q", err.Error(), want)
+			}
 		})
 	}
 }
@@ -176,6 +185,51 @@ func TestTimeoutIsUnavailable(t *testing.T) {
 	_, err := p.Resolve(context.Background(), mustRef(t, "gcp-sm://proj/db"))
 	if !errors.Is(err, provider.ErrUnavailable) {
 		t.Fatalf("kind = %q, want unavailable", provider.Kind(err))
+	}
+}
+
+// TestContextDeadlineStaysInChain checks that an expired context is reported
+// as such, so the resolver can say "timed out" instead of "request failed".
+func TestContextDeadlineStaysInChain(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		<-release
+		_, _ = w.Write([]byte(canaryBody))
+	}))
+	defer srv.Close()
+	defer close(release)
+	p := gcpsm.New(gcpsm.Options{BaseURL: srv.URL, HTTPClient: srv.Client()})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	_, err := p.Resolve(ctx, mustRef(t, "gcp-sm://proj/db"))
+	if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, provider.ErrUnavailable) {
+		t.Fatalf("error = %v, want it to wrap context.DeadlineExceeded and unavailable", err)
+	}
+	if strings.Contains(err.Error(), canaryBody) || strings.Contains(err.Error(), srv.URL) {
+		t.Fatalf("error text leaks transport details: %q", err.Error())
+	}
+}
+
+// TestDeadlineWhileReadingBody covers a deadline that passes after the status
+// line arrived but before the body did.
+func TestDeadlineWhileReadingBody(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"payload":`))
+		w.(http.Flusher).Flush()
+		<-release
+	}))
+	defer srv.Close()
+	defer close(release)
+	p := gcpsm.New(gcpsm.Options{BaseURL: srv.URL, HTTPClient: srv.Client()})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	_, err := p.Resolve(ctx, mustRef(t, "gcp-sm://proj/db"))
+	if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, provider.ErrUnavailable) {
+		t.Fatalf("error = %v, want it to wrap context.DeadlineExceeded and unavailable", err)
 	}
 }
 
@@ -215,8 +269,8 @@ func TestMissingADCIsDenied(t *testing.T) {
 	if !errors.Is(err, provider.ErrDenied) {
 		t.Fatalf("kind = %q, want denied (err=%v)", provider.Kind(err), err)
 	}
-	if !strings.Contains(err.Error(), "no Google Application Default Credentials (run: gcloud auth application-default login)") {
-		t.Fatalf("error text = %q", err.Error())
+	if want := noADCText; err.Error() != want {
+		t.Fatalf("error text = %q, want %q", err.Error(), want)
 	}
 }
 
@@ -239,7 +293,7 @@ func TestTokenRefreshFailureIsDenied(t *testing.T) {
 	if !errors.Is(err, provider.ErrDenied) {
 		t.Fatalf("kind = %q, want denied (err=%v)", provider.Kind(err), err)
 	}
-	if !strings.Contains(err.Error(), "gcloud auth application-default login") || strings.Contains(err.Error(), canaryBody) {
-		t.Fatalf("error = %q", err.Error())
+	if err.Error() != noADCText {
+		t.Fatalf("error = %q, want %q", err.Error(), noADCText)
 	}
 }

@@ -79,17 +79,20 @@ func (p *Provider) Resolve(ctx context.Context, r ref.Ref) (secret.Secret, error
 	}
 	client, err := p.client(ctx, r.Location, r.Opts["profile"])
 	if err != nil {
-		return secret.Secret{}, fmt.Errorf("%s: %s: %w", r.Raw, configReason(err), provider.ErrInvalid)
+		if ierr := provider.Interrupted(ctx); ierr != nil {
+			return secret.Secret{}, ierr
+		}
+		return secret.Secret{}, fmt.Errorf("%s: %w", configReason(err), provider.ErrInvalid)
 	}
 	out, err := client.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId:     aws.String(r.Name),
 		VersionStage: aws.String(versionStage),
 	})
 	if err != nil {
-		return secret.Secret{}, mapError(ctx, r, err)
+		return secret.Secret{}, mapError(ctx, err)
 	}
 	if out.SecretString == nil {
-		return secret.Secret{}, fmt.Errorf("%s: binary secrets are not supported: %w", r.Raw, provider.ErrInvalid)
+		return secret.Secret{}, fmt.Errorf("binary secrets are not supported: %w", provider.ErrInvalid)
 	}
 	return secret.New([]byte(*out.SecretString)), nil
 }
@@ -152,17 +155,22 @@ func configReason(err error) string {
 
 // mapError classifies err by AWS error code. The text carries the kind and
 // the code only, never the response body.
-func mapError(ctx context.Context, r ref.Ref, err error) error {
+func mapError(ctx context.Context, err error) error {
 	var api smithy.APIError
 	if errors.As(err, &api) {
 		code := api.ErrorCode()
-		return fmt.Errorf("%s: AWS error %s: %w", r.Raw, code, kindForCode(code, err))
+		return fmt.Errorf("AWS error %s: %w", code, kindForCode(code, err))
+	}
+	// The SDK error is dropped below, so keep the context's own error: it is
+	// what lets the resolver say "timed out" rather than "unreachable".
+	if ierr := provider.Interrupted(ctx); ierr != nil {
+		return ierr
 	}
 	var ce *credentialsError
-	if errors.As(err, &ce) && ctx.Err() == nil {
-		return fmt.Errorf("%s: %s: %w", r.Raw, noCredsMessage, provider.ErrDenied)
+	if errors.As(err, &ce) {
+		return fmt.Errorf("%s: %w", noCredsMessage, provider.ErrDenied)
 	}
-	return fmt.Errorf("%s: endpoint unreachable: %w", r.Raw, provider.ErrUnavailable)
+	return fmt.Errorf("endpoint unreachable: %w", provider.ErrUnavailable)
 }
 
 func kindForCode(code string, err error) error {

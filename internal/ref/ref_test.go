@@ -93,3 +93,19 @@ func TestErrorMessage(t *testing.T) {
 		t.Errorf("Error() = %q, want %q", got, want)
 	}
 }
+
+func TestSchemes(t *testing.T) {
+	got := ref.Schemes()
+	if diff := cmp.Diff([]string{"aws-sm", "gcp-sm", "keyring"}, got); diff != "" {
+		t.Errorf("Schemes() (-want +got):\n%s", diff)
+	}
+	got[0] = "changed"
+	if ref.Schemes()[0] != "aws-sm" {
+		t.Error("Schemes() returned a shared slice")
+	}
+	for _, s := range ref.Schemes() {
+		if _, err := ref.Parse(s + "://loc/name"); err != nil {
+			t.Errorf("Parse with scheme %s: %v", s, err)
+		}
+	}
+}

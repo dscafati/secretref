@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -35,8 +37,10 @@ trailing newline. Only keyring:// references are accepted.`,
 			// its own copy.
 			s := secret.New(value)
 			clear(value)
-			if err := w.Set(cmd.Context(), r, s); err != nil {
-				return internalError(fmt.Errorf("store %s: %w", r.Raw, err))
+			ctx, cancel := context.WithTimeout(cmd.Context(), defaultTimeout)
+			defer cancel()
+			if err := w.Set(ctx, r, s); err != nil {
+				return writeFailed("store", r, err)
 			}
 			_, _ = fmt.Fprintf(d.Stderr, "stored %s\n", r.Raw)
 			return nil
@@ -65,6 +69,16 @@ func keyringWriter(d Deps, raw string) (ref.Ref, provider.Writer, error) {
 		return ref.Ref{}, nil, internalError(fmt.Errorf("no writer for %s", r.Scheme))
 	}
 	return r, w, nil
+}
+
+// writeFailed reports a failed keyring write of r as an internal error. Set
+// and delete bound the write with defaultTimeout, so an unlock prompt nobody
+// answers ends as a timeout instead of a hang.
+func writeFailed(op string, r ref.Ref, err error) error {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return internalError(fmt.Errorf("%s %s: timed out after %s", op, r.Raw, defaultTimeout))
+	}
+	return internalError(fmt.Errorf("%s %s: %w", op, r.Raw, err))
 }
 
 // readValue reads the value with hidden input on a terminal, else from stdin

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -19,12 +20,14 @@ func newDeleteCmd(d Deps) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			err = w.Delete(cmd.Context(), r)
+			ctx, cancel := context.WithTimeout(cmd.Context(), defaultTimeout)
+			defer cancel()
+			err = w.Delete(ctx, r)
 			if errors.Is(err, provider.ErrNotFound) {
 				return &exitError{code: exitResolve, msg: r.Raw + ": not found"}
 			}
 			if err != nil {
-				return internalError(fmt.Errorf("delete %s: %w", r.Raw, err))
+				return writeFailed("delete", r, err)
 			}
 			_, _ = fmt.Fprintf(d.Stderr, "deleted %s\n", r.Raw)
 			return nil

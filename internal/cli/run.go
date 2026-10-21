@@ -85,11 +85,12 @@ func runRun(ctx context.Context, d Deps, o runOptions, dash int, argv []string) 
 		AllowMissing: o.allowMissing,
 	}).Resolve(ctx, entries)
 	for _, w := range res.Warnings {
-		_, _ = fmt.Fprintf(d.Stderr, "secretref: warning: %s\n", w)
+		_, _ = fmt.Fprintf(d.Stderr, "secretref: warning: %s; using the value from %s\n",
+			failureLine(w.Failure), relPath(cwd, w.File))
 	}
 	if len(res.Failures) > 0 {
 		for _, f := range res.Failures {
-			_, _ = fmt.Fprintf(d.Stderr, "secretref: %s  %s  %s\n", f.Key, f.Ref.Raw, describe(f.Err))
+			_, _ = fmt.Fprintf(d.Stderr, "secretref: %s\n", failureLine(f))
 		}
 		return exitWith(exitResolve)
 	}
@@ -139,13 +140,19 @@ func runCompose(ctx context.Context, d Deps, argv, env []string, keys map[string
 func fileList(keys map[string][]string, cwd string) string {
 	names := make([]string, 0, len(keys))
 	for f := range keys {
-		if rel, err := filepath.Rel(cwd, f); err == nil && !strings.HasPrefix(rel, "..") {
-			f = rel
-		}
-		names = append(names, f)
+		names = append(names, relPath(cwd, f))
 	}
 	slices.Sort(names)
 	return strings.Join(names, ", ")
+}
+
+// relPath returns path relative to cwd when it lies inside cwd, and path
+// unchanged otherwise.
+func relPath(cwd, path string) string {
+	if rel, err := filepath.Rel(cwd, path); err == nil && !strings.HasPrefix(rel, "..") {
+		return rel
+	}
+	return path
 }
 
 // startResult turns the outcome of starting the command into the command's
@@ -183,9 +190,7 @@ func loadEntries(cwd string, flagged []string) ([]envfile.Entry, error) {
 	switch {
 	case errors.As(err, &pe):
 		shown := *pe
-		if rel, rerr := filepath.Rel(cwd, pe.File); rerr == nil && !strings.HasPrefix(rel, "..") {
-			shown.File = rel
-		}
+		shown.File = relPath(cwd, pe.File)
 		return nil, usageError("%s", shown.Error())
 	case errors.Is(err, os.ErrNotExist):
 		return nil, usageError("%v", err)
@@ -214,6 +219,11 @@ func keysByFile(entries []envfile.Entry, res resolve.Result) map[string][]string
 		}
 	}
 	return out
+}
+
+// failureLine renders a failed key as "<key>  <ref>  <kind>[: <reason>]".
+func failureLine(f resolve.Failure) string {
+	return f.Key + "  " + f.Ref.Raw + "  " + describe(f.Err)
 }
 
 // describe renders a resolution error as "<kind>: <reason>". Provider errors

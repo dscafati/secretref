@@ -2,6 +2,7 @@ package ref
 
 import (
 	"fmt"
+	"maps"
 	"net/url"
 	"slices"
 	"strings"
@@ -9,7 +10,7 @@ import (
 
 // Ref is a parsed secret reference.
 type Ref struct {
-	Scheme   string            // "aws-sm" | "gcp-sm" | "keyring"
+	Scheme   string            // one of Schemes()
 	Location string            // region | project | service
 	Name     string            // secret name (may contain "/") | secret | account
 	Field    string            // JSON field after "#", "" if none
@@ -28,18 +29,35 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("invalid reference %s: %s", e.Raw, e.Msg)
 }
 
-// allowedOpts lists, per scheme, the query keys a reference may carry. A
-// scheme absent from this map is unknown.
-func allowedOpts(scheme string) (map[string]bool, bool) {
-	switch scheme {
-	case "aws-sm":
-		return map[string]bool{"profile": true}, true
-	case "gcp-sm":
-		return map[string]bool{"version": true}, true
-	case "keyring":
-		return nil, true
+// schemeOpts maps every supported scheme to the query keys a reference with
+// that scheme may carry. It is the single list of schemes; Schemes and
+// allowedOpts derive from it.
+func schemeOpts() map[string][]string {
+	return map[string][]string{
+		"aws-sm":  {"profile"},
+		"gcp-sm":  {"version"},
+		"keyring": nil,
 	}
-	return nil, false
+}
+
+// Schemes returns the supported reference schemes in sorted order. The slice
+// is new on every call, so the caller may modify it.
+func Schemes() []string {
+	return slices.Sorted(maps.Keys(schemeOpts()))
+}
+
+// allowedOpts returns the query keys a reference with scheme may carry, and
+// false when the scheme is unknown.
+func allowedOpts(scheme string) (map[string]bool, bool) {
+	keys, ok := schemeOpts()[scheme]
+	if !ok {
+		return nil, false
+	}
+	allowed := make(map[string]bool, len(keys))
+	for _, k := range keys {
+		allowed[k] = true
+	}
+	return allowed, true
 }
 
 // Parse validates s and returns the reference it names. Errors have type

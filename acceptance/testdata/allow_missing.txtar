@@ -1,6 +1,6 @@
 # --allow-missing keeps the file's value for a failed reference and warns.
 exec secretref run --allow-missing -- printenv-helper MISSING DB_PASSWORD
-stderr '^secretref: warning: .*MISSING'
+stderr '^secretref: warning: MISSING  keyring://app/missing  not found; using the value from \.env$'
 grep '^MISSING=fallback$' child-env.txt
 grep '^DB_PASSWORD=SR_CANARY_7f3a9c$' child-env.txt
 no-canary
