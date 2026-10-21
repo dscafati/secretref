@@ -335,7 +335,10 @@ secretref run -- docker compose up
    directory or a parent directory. secretref reads `COMPOSE_FILE` and
    `COMPOSE_PATH_SEPARATOR` only from the environment it started in, never
    from an env file, because an env-file value can be built from a secret.
-2. It finds the services whose `env_file:` lists a file that secretref loaded.
+2. For each service, it picks the keys that secretref resolved from an
+   annotation, when the file that gave the key its final value is one the
+   service lists in `env_file:`. Compose reads every other key from
+   `env_file:` itself, as it would without secretref.
 3. It writes a temporary override file with mode 0600. The file holds names
    only, in the form `KEY: ${KEY}`. It never holds a value.
 4. It starts `docker compose` with the override added. Compose fills in
@@ -345,8 +348,8 @@ secretref run -- docker compose up
    signals on to it. After Compose exits, it removes the override and exits
    with Compose's exit code.
 
-If no service uses the loaded env files, secretref writes no override and
-prints a warning. The containers then see the file values.
+If no service uses an env file with a resolved key, secretref writes no
+override and prints a warning. The containers then see the file values.
 
 Limits:
 

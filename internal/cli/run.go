@@ -101,7 +101,7 @@ func runRun(ctx context.Context, d Deps, o runOptions, dash int, argv []string) 
 	env := res.Environ(d.Environ())
 	if compose.Detect(argv) {
 		return runCompose(ctx, d, compose.Input{
-			Argv: argv, Environ: env, Parent: d.Environ(), Keys: keysByFile(entries, res), Cwd: cwd,
+			Argv: argv, Environ: env, Parent: d.Environ(), Keys: keysByFile(res), Cwd: cwd,
 		})
 	}
 	if runtime.GOOS == "windows" {
@@ -205,22 +205,15 @@ func loadEntries(cwd string, flagged []string) ([]envfile.Entry, error) {
 	return entries, nil
 }
 
-// keysByFile maps each loaded file to the keys it defines that the child
-// receives from secretref, so compose services listing that file get them.
-func keysByFile(entries []envfile.Entry, res resolve.Result) map[string][]string {
-	injected := map[string]bool{}
-	for _, v := range res.Vars {
-		if !v.FromEnv {
-			injected[v.Key] = true
-		}
-	}
+// keysByFile maps each loaded file to the keys resolved from an annotation
+// whose final value came from that file. Compose passes only these through
+// the override, and only to services that list that file; it reads every
+// other key from env_file itself.
+func keysByFile(res resolve.Result) map[string][]string {
 	out := map[string][]string{}
-	seen := map[string]bool{}
-	for _, e := range entries {
-		id := e.File + "\x00" + e.Key
-		if injected[e.Key] && !seen[id] {
-			seen[id] = true
-			out[e.File] = append(out[e.File], e.Key)
+	for _, v := range res.Vars {
+		if v.Ref != nil && !v.FromEnv && !v.FellBack {
+			out[v.File] = append(out[v.File], v.Key)
 		}
 	}
 	return out

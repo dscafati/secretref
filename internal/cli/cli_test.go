@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/dscafati/secretref/internal/cli"
 	"github.com/dscafati/secretref/internal/procexec"
@@ -546,5 +547,71 @@ func TestNewRootHasCommands(t *testing.T) {
 		if !slices.Contains(names, want) {
 			t.Errorf("missing command %s in %v", want, names)
 		}
+	}
+}
+
+// composeOverride runs secretref with args in compose mode and returns the
+// override's services, each mapped to its environment keys.
+func composeOverride(h *harness, args ...string) map[string][]string {
+	h.t.Helper()
+	tmp := h.t.TempDir()
+	for _, k := range []string{"TMPDIR", "TMP", "TEMP"} {
+		h.t.Setenv(k, tmp)
+	}
+	got := map[string][]string{}
+	h.duringRun = func(s started) {
+		v, _ := envOf(s.env, "COMPOSE_FILE")
+		parts := strings.Split(v, string(os.PathListSeparator))
+		data, err := os.ReadFile(parts[len(parts)-1]) //nolint:gosec // G304: the override path the code under test created.
+		if err != nil {
+			h.t.Fatalf("override not readable: %v", err)
+		}
+		var o struct {
+			Services map[string]struct {
+				Environment map[string]string `yaml:"environment"`
+			} `yaml:"services"`
+		}
+		if err := yaml.Unmarshal(data, &o); err != nil {
+			h.t.Fatalf("override is not YAML: %v", err)
+		}
+		for name, svc := range o.Services {
+			for k := range svc.Environment {
+				got[name] = append(got[name], k)
+			}
+			slices.Sort(got[name])
+		}
+	}
+	h.expect(0, args...)
+	return got
+}
+
+func TestRunComposeOverridesResolvedKeysOnly(t *testing.T) {
+	// Plain keys (A) and keys kept from the file by --allow-missing (M) stay
+	// with compose's own env_file handling.
+	h := newHarness(t)
+	h.write(".env", annotatedEnv+"# secretref: keyring://app/missing\nM=x\n")
+	h.write("compose.yaml", "services:\n  web:\n    image: alpine\n    env_file: .env\n")
+	got := composeOverride(h, "run", "--allow-missing", "--", "docker", "compose", "up")
+	want := map[string][]string{"web": {"B"}}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("override services (-want +got):\n%s", diff)
+	}
+}
+
+func TestRunComposeServiceGetsKeysFromItsOwnEnvFiles(t *testing.T) {
+	// B's final value comes from .env.local, which worker does not list, so
+	// worker keeps compose's reading of .env for B.
+	h := newHarness(t)
+	h.fake.Put("keyring://app/c", canary)
+	h.fake.Put("keyring://app/d", canary)
+	h.write(".env", annotatedEnv+"# secretref: keyring://app/c\nC=placeholder\n")
+	h.write(".env.local", "# secretref: keyring://app/d\nB=local\n")
+	h.write("compose.yaml", "services:\n"+
+		"  web:\n    image: alpine\n    env_file: [.env, .env.local]\n"+
+		"  worker:\n    image: alpine\n    env_file: .env\n")
+	got := composeOverride(h, "run", "--", "docker", "compose", "up")
+	want := map[string][]string{"web": {"B", "C"}, "worker": {"C"}}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("override services (-want +got):\n%s", diff)
 	}
 }
