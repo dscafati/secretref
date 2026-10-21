@@ -34,8 +34,8 @@ Never install tools globally and never edit tool versions anywhere else.
 - `CGO_ENABLED=0` must build for linux, darwin, windows on amd64 and arm64.
 - Stdout belongs to the child process. Diagnostics go to stderr through `log/slog`.
 - No mutable package-level state. The only package-level variables are `build.Version`,
-  sentinel errors from `errors.New`, and compiled regexps from `regexp.MustCompile`; nothing
-  reassigns them (ADR 0015). Dependencies are passed to constructors.
+  sentinel errors from `errors.New`, compiled regexps from `regexp.MustCompile`, and test
+  flags in `_test.go` files; nothing reassigns them (ADR 0015). Dependencies are passed to constructors.
 
 ## Rules
 

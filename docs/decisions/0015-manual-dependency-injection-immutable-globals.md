@@ -15,6 +15,8 @@ The code also needs two other kinds of package-level variable, and neither holds
 - Sentinel errors such as `var ErrNotFound = errors.New("not found")`. `errors.Is` compares identity, so a sentinel must be one shared value. Go cannot declare an error as a constant.
 - Compiled regular expressions such as `var re = regexp.MustCompile(...)`. A `*regexp.Regexp` is immutable and safe for concurrent use. Compiling once at package level avoids recompiling on every call.
 
+Golden-file tests use the standard `var update = flag.Bool("update", ...)` flag. The `testing` package parses flags before tests run, so the flag must be registered at package level. It lives only in `_test.go` files and never reaches the binary.
+
 The `gochecknoglobals` linter already exempts both. The written rule in 0006 forbids them, so the rule and the lint disagree.
 
 ## Decision
@@ -27,9 +29,10 @@ There is no mutable package-level state. The only package-level variables are:
 
 - `build.Version`, set by the linker,
 - sentinel errors created with `errors.New`,
-- regular expressions compiled with `regexp.MustCompile`.
+- regular expressions compiled with `regexp.MustCompile`,
+- test flags registered with the `flag` package, in `_test.go` files only.
 
-Nothing reassigns them after initialization.
+Nothing reassigns them after initialization; the `flag` package alone sets a test flag, from the command line.
 
 This record supersedes 0006.
 
@@ -38,6 +41,6 @@ This record supersedes 0006.
 - Wiring is visible in one file.
 - Tests build only the pieces they need, and can run in parallel.
 - Constructors can grow long argument lists. We group related arguments into small structs when that happens.
-- The written rule matches what `gochecknoglobals` enforces.
+- The written rule matches what `gochecknoglobals` enforces, except that test flags still need a `//nolint:gochecknoglobals` comment with a reason.
 - Reviewers reject any other package-level variable, and any code that reassigns an allowed one.
 - Compile-time interface checks such as `var _ provider.Provider = (*Provider)(nil)` declare no usable variable and are not affected.

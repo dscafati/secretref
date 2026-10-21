@@ -8,8 +8,9 @@ tools cannot.
 - Dependency injection is manual. Constructors receive their dependencies; wiring
   happens only in `cmd/secretref/main.go`. No framework.
 - No mutable package-level state. The only package-level variables are
-  `build.Version`, sentinel errors from `errors.New`, and compiled regexps from
-  `regexp.MustCompile`, and nothing reassigns them. See
+  `build.Version`, sentinel errors from `errors.New`, compiled regexps from
+  `regexp.MustCompile`, and test flags such as `-update` in `_test.go` files.
+  Nothing reassigns them. See
   [decision 0015](decisions/0015-manual-dependency-injection-immutable-globals.md).
 - Define small interfaces in the package that consumes them, not the one that
   implements them.
