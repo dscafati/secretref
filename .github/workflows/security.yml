@@ -34,7 +34,8 @@ jobs:
       - name: Scan to SARIF
         run: go tool -modfile=tools/go.mod govulncheck -format sarif ./... > govulncheck.sarif
       - name: Upload SARIF
-        if: github.event.pull_request.head.repo.fork != true
+        # Code scanning needs a public repository (or Advanced Security).
+        if: github.event.pull_request.head.repo.fork != true && github.event.repository.private == false
         uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: govulncheck.sarif
@@ -67,6 +68,9 @@ jobs:
       - uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           category: /language:go
+          # Code scanning needs a public repository (or Advanced Security).
+          # While private, the analysis still runs but nothing is uploaded.
+          upload: ${{ github.event.repository.private == false && 'always' || 'never' }}
 
   zizmor:
     runs-on: ubuntu-latest

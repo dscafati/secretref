@@ -145,6 +145,18 @@ You need an npm account with two-factor authentication enabled.
    `latest` on `secretref` stays at `0.0.1` until the first stable release,
    because prereleases publish under `next`.
 
+## Checks that wait for a public repository
+
+While the repository is private, three things are switched off because GitHub
+code scanning and OpenSSF Scorecard need a public repository (or Advanced
+Security): the `scorecard` workflow, the SARIF upload of `govulncheck`, and the
+result upload of CodeQL. The analyses themselves still run. `govulncheck` still
+fails the job on a vulnerability through its text output, and CodeQL still builds
+and analyzes the code. The workflows test `github.event.repository.private`, so
+all three turn on by themselves once the repository is made public. Nothing
+needs to change in the files. After the switch, check that the first
+`scorecard` and CodeQL runs upload without errors.
+
 ## Dry run
 
 Run the release workflow by hand (Actions > release > Run workflow). A manual

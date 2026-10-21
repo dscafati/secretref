@@ -11,6 +11,8 @@ permissions: {}
 
 jobs:
   analysis:
+    # Scorecard does not support private repositories.
+    if: github.event.repository.private == false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
