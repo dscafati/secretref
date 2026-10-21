@@ -1,9 +1,11 @@
 # ${VAR} expands to the resolved value in unquoted and double-quoted values,
-# not in single-quoted ones.
-exec secretref run -- printenv-helper DATABASE_URL QUOTED LITERAL
+# not in single-quoted ones. A bare $VAR is literal and $$ is a literal $.
+exec secretref run -- printenv-helper DATABASE_URL QUOTED LITERAL BARE DOLLARS
 grep '^DATABASE_URL=postgres://app:SR_CANARY_7f3a9c@db/app$' child-env.txt
 grep '^QUOTED=pw=SR_CANARY_7f3a9c;$' child-env.txt
 grep '^LITERAL=\$\{DB_PASSWORD\}$' child-env.txt
+grep '^BARE=abc\$DB_PASSWORD$' child-env.txt
+grep '^DOLLARS=pa\$word$' child-env.txt
 no-canary
 
 -- .env --
@@ -12,3 +14,5 @@ DB_PASSWORD=localdev
 DATABASE_URL=postgres://app:${DB_PASSWORD}@db/app
 QUOTED="pw=${DB_PASSWORD};"
 LITERAL='${DB_PASSWORD}'
+BARE=abc$DB_PASSWORD
+DOLLARS=pa$$word

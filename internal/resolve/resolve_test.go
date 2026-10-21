@@ -246,7 +246,7 @@ func TestExpand(t *testing.T) {
 	f.Put("keyring://s/tricky", "${B}$B")
 	env := envOf(map[string]string{"HOME_X": "/h", "FROMENV": "${NOT}"})
 	entries := []envfile.Entry{
-		{File: ".env", Key: "URL", Value: "pg://u:${PW}@h/$DB", Quote: envfile.QuoteDouble},
+		{File: ".env", Key: "URL", Value: "pg://u:${PW}@h/${DB}", Quote: envfile.QuoteDouble},
 		{File: ".env", Key: "PW", Ref: mustRef(t, "keyring://s/pw")},
 		{File: ".env", Key: "DB", Value: "app"},
 		{File: ".env", Key: "B", Value: "bee"},
@@ -255,7 +255,9 @@ func TestExpand(t *testing.T) {
 		{File: ".env", Key: "ESC", Value: `\$DB`, Quote: envfile.QuoteDouble},
 		{File: ".env", Key: "ESCU", Value: `\$DB`},
 		{File: ".env", Key: "DEF", Value: "${NOPE:-d}-${NOPE}-"},
-		{File: ".env", Key: "ENV", Value: "$HOME_X/${FROMENV}"},
+		{File: ".env", Key: "ENV", Value: "${HOME_X}/${FROMENV}"},
+		{File: ".env", Key: "BARE", Value: "$DB$PW"},
+		{File: ".env", Key: "DOLLAR", Value: "pa$$${DB}$$"},
 		{File: ".env", Key: "CHAIN", Value: "${URL2}"},
 		{File: ".env", Key: "URL2", Value: "[${DB}]"},
 		{File: ".env", Key: "CYC", Value: "${CYC}x"},
@@ -272,6 +274,8 @@ func TestExpand(t *testing.T) {
 		"ESCU":   "$DB",
 		"DEF":    "d--",
 		"ENV":    "/h/${NOT}",
+		"BARE":   "$DB$PW",
+		"DOLLAR": "pa$app$",
 		"CHAIN":  "[app]",
 		"URL2":   "[app]",
 		"CYC":    "x",
@@ -284,7 +288,7 @@ func TestExpand(t *testing.T) {
 func TestExpandSeesEnvOverride(t *testing.T) {
 	env := envOf(map[string]string{"DB": "envdb"})
 	res := newResolver(fake.New(), env, resolve.Options{}).Resolve(context.Background(), []envfile.Entry{
-		plain(".env", "DB", "filedb"), plain(".env", "X", "$DB"),
+		plain(".env", "DB", "filedb"), plain(".env", "X", "${DB}"),
 	})
 	if got := values(res)["X"]; got != "envdb" {
 		t.Errorf("X = %q, want envdb", got)

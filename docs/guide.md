@@ -106,22 +106,39 @@ way.
 ## Variable expansion
 
 Unquoted and double-quoted values expand variables. Single-quoted values do
-not.
+not. The rules follow Docker Compose's interpolation, so `$` means the same
+to secretref and to Compose.
 
 | Form | Result |
 |---|---|
-| `${NAME}` or `$NAME` | The value of `NAME`, or the empty string if it is not defined. |
+| `${NAME}` | The value of `NAME`, or the empty string if it is not defined. |
 | `${NAME:-default}` | The value of `NAME`, or `default` if `NAME` is unset or empty. |
+| `$$` | A literal `$`. |
 | `\$` | A literal `$`. |
 
+| In the file | The child gets |
+|---|---|
+| `URL=pg://${USER}@db` with `USER=app` | `pg://app@db` |
+| `PASSWORD=pa$$word` | `pa$word` |
+| `PRICE=abc$def` | `abc$def` |
+| `LITERAL=$${USER}` | `${USER}` |
+| `QUOTED="cost: \$5"` | `cost: $5` |
+| `SINGLE='${USER}'` | `${USER}` |
+
+- A bare `$NAME`, without braces, is not expanded. It stays as written.
+  Use `${NAME}` to expand a variable.
+- Only names made of letters, digits, and `_` expand. A key with `.` or `-`
+  in it cannot be used in `${...}`; `${my-key}` stays as written.
 - secretref looks a name up in the final file variables first, after the
   precedence rules above, then in the process environment. `${HOME}` works.
 - The order of lines does not matter. A value may refer to a variable defined
   later in the file.
-- The default in `${NAME:-default}` is literal text. `${A:-$B}` gives the two
-  characters `$B` when `A` is unset.
-- `$` followed by anything other than a name stays as written. So does `${`
-  with no closing `}`.
+- The default in `${NAME:-default}` is literal text up to the first `}`.
+  `${A:-$B}` gives the two characters `$B` when `A` is unset, and defaults do
+  not nest.
+- Any other `$` stays as written. So does `${` with no closing `}`, and so do
+  the Compose forms that secretref does not support, such as
+  `${NAME-default}`, `${NAME:?error}`, and `${NAME:+other}`.
 - If variables refer to each other in a cycle, the reference that closes the
   cycle expands to the empty string. It is not an error.
 
