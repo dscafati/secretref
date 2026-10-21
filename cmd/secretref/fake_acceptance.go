@@ -9,6 +9,7 @@ import (
 
 	"github.com/dscafati/secretref/internal/provider"
 	"github.com/dscafati/secretref/internal/provider/fake"
+	"github.com/dscafati/secretref/internal/ref"
 )
 
 // installTestProviders replaces every provider with one fake loaded from the
@@ -34,7 +35,7 @@ func installTestProviders(reg provider.Registry, writers map[string]provider.Wri
 	for raw, v := range values {
 		f.Put(raw, v)
 	}
-	for _, scheme := range []string{"aws-sm", "gcp-sm", "keyring"} {
+	for _, scheme := range ref.Schemes() {
 		reg[scheme] = f
 	}
 	writers["keyring"] = f
