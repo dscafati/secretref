@@ -5,7 +5,7 @@ CONTAINER ?= podman
 FUZZTIME ?= 30s
 
 .DEFAULT_GOAL := check
-.PHONY: check fix fmt-check lint tidy-check test test-acceptance fuzz test-integration docs docs-check adr-check skills-check snapshot
+.PHONY: check fix fmt-check lint tidy-check test test-acceptance fuzz test-integration docs docs-check adr-index adr-check skills-check snapshot
 
 check: fmt-check lint tidy-check test test-acceptance docs-check adr-check skills-check
 
@@ -53,7 +53,7 @@ test-integration:
 	  CONTAINER=$(CONTAINER) $(GO) test -tags integration ./internal/provider/...; \
 	else echo "test-integration: no integration tests yet, skipping"; fi
 
-docs:
+docs: adr-index
 	@if [ -d cmd/gen-docs ]; then $(GO) run ./cmd/gen-docs; \
 	else echo "docs: cmd/gen-docs not present yet, skipping"; fi
 
@@ -63,10 +63,13 @@ docs:
 # dist-docs/completions/secretref.{bash,zsh,fish}.
 docs-check:
 	@if [ -d cmd/gen-docs ]; then \
-	  $(MAKE) docs && git diff --exit-code docs/reference && \
+	  $(GO) run ./cmd/gen-docs && git diff --exit-code docs/reference && \
 	  if [ -n "$$(git status --porcelain docs/reference)" ]; then \
 	    echo "docs/reference has untracked or uncommitted changes:"; git status --porcelain docs/reference; exit 1; fi; \
 	else echo "docs-check: cmd/gen-docs not present yet, skipping"; fi
+
+adr-index:
+	sh scripts/gen-adr-index.sh > docs/decisions/index.md
 
 adr-check:
 	@if [ -f scripts/check-adr-index.sh ]; then sh scripts/check-adr-index.sh; \

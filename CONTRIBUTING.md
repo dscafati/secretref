@@ -58,8 +58,8 @@ Architectural decisions live in [docs/decisions](docs/decisions/index.md).
 
 - To change a decision, write a new record that supersedes the old one. Do not
   edit the old record, except to set its Status line to `Superseded by NNNN`.
-- Add the new record to `docs/decisions/index.md`. `make check` fails if you do
-  not.
+- Run `make docs` to regenerate `docs/decisions/index.md`. Do not edit it by
+  hand. `make check` fails if it is out of date.
 - Use the next free number and the same format as the existing records. If
   another branch merges a record with the same number first, renumber yours
   before merging. `make check` fails on duplicate numbers.

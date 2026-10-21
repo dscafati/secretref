@@ -25,4 +25,4 @@ Used by human and automated reviewers. Rules come from [AGENTS.md](../AGENTS.md)
 - Style preferences that docs/style.md does not state.
 - Test helper naming or table layout that follows the surrounding code.
 - Missing features listed as out of scope in the README or an ADR.
-- Generated files under `docs/reference/` when `make docs` produces them.
+- Generated files under `docs/reference/` and `docs/decisions/index.md` when `make docs` produces them.

@@ -16,7 +16,7 @@ Run `make` from the repository root. The Makefile is the source of truth for tar
 | `make test-acceptance` | Real binary through testscript against `provider/fake`. |
 | `make fuzz` | Parser fuzz targets; `FUZZTIME` sets the duration. |
 | `make test-integration` | Providers against LocalStack and a GCP fake; `CONTAINER` selects podman or docker. |
-| `make docs` | Regenerate `docs/reference/` from cobra. |
+| `make docs` | Regenerate `docs/reference/` from cobra and `docs/decisions/index.md` from the records. |
 | `make snapshot` | GoReleaser snapshot build for all targets. |
 
 Dev tools are pinned in `tools/go.mod` and run as `go tool -modfile=tools/go.mod <tool>`.
@@ -36,7 +36,7 @@ Never install tools globally and never edit tool versions anywhere else.
 
 ## Rules
 
-- Do not hand-edit `docs/reference/`; run `make docs`.
+- Do not hand-edit `docs/reference/` or `docs/decisions/index.md`; run `make docs`.
 - Do not write tests that call real clouds. Those need maintainer credentials and run manually.
 - Stop and ask a human before `git push` or opening a pull request.
 - Commits use Conventional Commits. No AI `Co-Authored-By` or `Claude-Session` trailers.
