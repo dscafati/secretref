@@ -632,3 +632,18 @@ func TestRunComposeNoWarningWhenServiceSetsTheKey(t *testing.T) {
 		t.Errorf("COMPOSE_FILE = %q, want unset", v)
 	}
 }
+
+func TestRunComposeWarnsAboutKeysComposeCannotSubstitute(t *testing.T) {
+	h := newHarness(t)
+	tmp := t.TempDir()
+	for _, k := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(k, tmp)
+	}
+	h.write(".env", "# secretref: "+refB+"\na.b=placeholder\n")
+	h.write("compose.yaml", "services:\n  web:\n    image: alpine\n    env_file: .env\n")
+	h.expect(0, "run", "--", "docker", "compose", "up")
+	want := "secretref: compose: warning: a.b is not a name compose can substitute; containers will see the value from env_file\n"
+	if got := h.stderr.String(); got != want {
+		t.Errorf("stderr = %q, want %q", got, want)
+	}
+}

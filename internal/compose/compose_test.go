@@ -505,3 +505,33 @@ func TestServiceEnvironmentKeepsItsKeys(t *testing.T) {
 		t.Errorf("env changed (-want +got):\n%s", diff)
 	}
 }
+
+func TestKeysComposeCannotSubstituteAreSkipped(t *testing.T) {
+	// Compose substitutes only ${NAME} with NAME of letters, digits, and _,
+	// not starting with a digit. Other keys get one warning each.
+	dir := project(t, map[string]string{
+		"compose.yaml": "services:\n  web:\n    env_file: .env\n  worker:\n    env_file: .env\n",
+	})
+	keys := map[string][]string{filepath.Join(dir, ".env"): {"a.b", "OK", "x-y", "_ok2", "9x"}}
+	plan, path := prepare(t, []string{"docker", "compose", "up"}, nil, keys, dir)
+	want := map[string][]string{"web": {"OK", "_ok2"}, "worker": {"OK", "_ok2"}}
+	if diff := cmp.Diff(want, readServices(t, path)); diff != "" {
+		t.Errorf("override services (-want +got):\n%s", diff)
+	}
+	var named []string
+	for _, w := range plan.Warnings {
+		named = append(named, strings.Fields(w)[0])
+	}
+	if diff := cmp.Diff([]string{"9x", "a.b", "x-y"}, named); diff != "" {
+		t.Errorf("warned keys (-want +got):\n%s\nWarnings = %q", diff, plan.Warnings)
+	}
+
+	keys = map[string][]string{filepath.Join(dir, ".env"): {"a.b"}}
+	plan, path = prepare(t, []string{"docker", "compose", "up"}, nil, keys, dir)
+	if path != "" {
+		t.Errorf("override written: %s", path)
+	}
+	if !plan.Matched || len(plan.Warnings) != 1 {
+		t.Errorf("Matched = %v, Warnings = %q", plan.Matched, plan.Warnings)
+	}
+}

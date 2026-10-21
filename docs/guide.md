@@ -360,6 +360,10 @@ Limits:
   secretref runs the command as an ordinary command.
 - Variables that were already set in the environment are not added to the
   override. Compose reads those from `env_file:` as usual.
+- Compose substitutes `${NAME}` only for names made of letters, digits, and
+  `_` that do not start with a digit. A resolved key with another name, such
+  as `app.port`, is left out of the override with a warning, and the
+  containers see its value from `env_file:`.
 - `COMPOSE_FILE` set in an env file does not choose the compose files. secretref
   prints a warning; set it in your shell or pass `-f` instead.
 

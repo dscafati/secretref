@@ -128,6 +128,11 @@ func Prepare(ctx context.Context, in Input) (Plan, error) {
 		return Plan{}, err
 	}
 	unchanged.Matched = matched
+	services, skipped := substitutable(services)
+	for _, k := range skipped {
+		warnings = append(warnings, k+" is not a name compose can substitute; containers will see the value from env_file")
+	}
+	unchanged.Warnings = warnings
 	if len(services) == 0 {
 		return unchanged, nil
 	}
@@ -158,6 +163,41 @@ func Prepare(ctx context.Context, in Input) (Plan, error) {
 	}
 	plan.Env = setEnv(setEnv(environ, composeFileVar, orig+sep+path), pathSeparatorVar, sep)
 	return plan, nil
+}
+
+// substitutable splits services into the keys compose can substitute as
+// ${KEY} and the sorted, distinct keys it cannot. Services left with no key
+// are dropped.
+func substitutable(services map[string][]string) (map[string][]string, []string) {
+	out := map[string][]string{}
+	var skipped []string
+	for name, keys := range services {
+		var ok []string
+		for _, k := range keys {
+			if isComposeName(k) {
+				ok = append(ok, k)
+			} else if !slices.Contains(skipped, k) {
+				skipped = append(skipped, k)
+			}
+		}
+		if len(ok) > 0 {
+			out[name] = ok
+		}
+	}
+	slices.Sort(skipped)
+	return out, skipped
+}
+
+// isComposeName reports whether compose interpolates ${name}: a letter or _,
+// then letters, digits, or _.
+func isComposeName(name string) bool {
+	for i, c := range name {
+		letter := c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+		if !letter && (i == 0 || c < '0' || c > '9') {
+			return false
+		}
+	}
+	return name != ""
 }
 
 // override is the YAML document written for compose.
