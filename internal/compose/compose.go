@@ -72,9 +72,12 @@ type Plan struct {
 	Args    []string
 	Env     []string
 	Cleanup func() error
-	// Override is the path of the override file, or "" when no service uses
-	// a loaded env file and nothing was written.
+	// Override is the path of the override file, or "" when no service needs
+	// a key and nothing was written.
 	Override string
+	// Matched reports whether any service lists a file in Input.Keys in
+	// env_file.
+	Matched bool
 	// Warnings are messages for stderr. They hold variable names, never
 	// values.
 	Warnings []string
@@ -120,10 +123,11 @@ func Prepare(ctx context.Context, in Input) (Plan, error) {
 	if len(files) == 0 {
 		return unchanged, nil
 	}
-	services, err := matchServices(ctx, files, projectDir(inv, files, cwd), absKeys(in.Keys, cwd))
+	services, matched, err := matchServices(ctx, files, projectDir(inv, files, cwd), absKeys(in.Keys, cwd))
 	if err != nil {
 		return Plan{}, err
 	}
+	unchanged.Matched = matched
 	if len(services) == 0 {
 		return unchanged, nil
 	}
@@ -132,7 +136,7 @@ func Prepare(ctx context.Context, in Input) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
-	plan := Plan{Args: argv, Env: environ, Cleanup: func() error { return os.Remove(path) }, Override: path, Warnings: warnings}
+	plan := Plan{Args: argv, Env: environ, Cleanup: func() error { return os.Remove(path) }, Override: path, Matched: true, Warnings: warnings}
 	if inv.lastFileEnd > 0 {
 		args := slices.Clone(argv[:inv.lastFileEnd])
 		args = append(args, "-f", path)

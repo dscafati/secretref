@@ -615,3 +615,20 @@ func TestRunComposeServiceGetsKeysFromItsOwnEnvFiles(t *testing.T) {
 		t.Errorf("override services (-want +got):\n%s", diff)
 	}
 }
+
+func TestRunComposeNoWarningWhenServiceSetsTheKey(t *testing.T) {
+	h := newHarness(t)
+	tmp := t.TempDir()
+	for _, k := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(k, tmp)
+	}
+	h.write(".env", annotatedEnv)
+	h.write("compose.yaml", "services:\n  web:\n    image: alpine\n    env_file: .env\n    environment: [B=db]\n")
+	h.expect(0, "run", "--", "docker", "compose", "up")
+	if got := h.stderr.String(); got != "" {
+		t.Errorf("stderr = %q, want nothing", got)
+	}
+	if v, ok := envOf(h.calls[0].env, "COMPOSE_FILE"); ok {
+		t.Errorf("COMPOSE_FILE = %q, want unset", v)
+	}
+}

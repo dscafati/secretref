@@ -200,51 +200,84 @@ func projectDir(inv invocation, files []composeFile, cwd string) string {
 // composeDoc holds the part of a compose file secretref reads.
 type composeDoc struct {
 	Services map[string]struct {
-		EnvFile yaml.Node `yaml:"env_file"`
+		EnvFile     yaml.Node `yaml:"env_file"`
+		Environment yaml.Node `yaml:"environment"`
 	} `yaml:"services"`
 }
 
-// matchServices returns, per service, the sorted keys of every loaded env
-// file the service lists in env_file.
-func matchServices(ctx context.Context, files []composeFile, dir string, keysByFile map[string][]string) (map[string][]string, error) {
-	sets := map[string]map[string]bool{}
+// matchServices returns, per service, the sorted keys the override sets: the
+// keys of every file in keysByFile the service lists in env_file, minus the
+// keys the service sets in environment: in any of the files. matched reports
+// whether any service lists a file in keysByFile.
+func matchServices(ctx context.Context, files []composeFile, dir string, keysByFile map[string][]string) (services map[string][]string, matched bool, err error) {
+	wanted := map[string]map[string]bool{}
+	own := map[string]map[string]bool{}
 	for _, f := range files {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		data, err := os.ReadFile(f.path)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", f.label, pathCause(err))
+			return nil, false, fmt.Errorf("%s: %w", f.label, pathCause(err))
 		}
 		var doc composeDoc
 		if err := yaml.Unmarshal(data, &doc); err != nil {
-			return nil, fmt.Errorf("%s: %w", f.label, err)
+			return nil, false, fmt.Errorf("%s: %w", f.label, err)
 		}
 		for name, svc := range doc.Services {
+			for _, k := range environmentKeys(&svc.Environment) {
+				addKey(own, name, k)
+			}
 			for _, p := range envFilePaths(&svc.EnvFile) {
-				keys := keysByFile[pathKey(absPath(p, dir), foldCase())]
-				if len(keys) == 0 {
-					continue
-				}
-				if sets[name] == nil {
-					sets[name] = map[string]bool{}
-				}
+				keys, ok := keysByFile[pathKey(absPath(p, dir), foldCase())]
+				matched = matched || ok
 				for _, k := range keys {
-					sets[name][k] = true
+					addKey(wanted, name, k)
 				}
 			}
 		}
 	}
-	out := make(map[string][]string, len(sets))
-	for name, set := range sets {
-		keys := make([]string, 0, len(set))
+	out := map[string][]string{}
+	for name, set := range wanted {
+		var keys []string
 		for k := range set {
-			keys = append(keys, k)
+			if !own[name][k] {
+				keys = append(keys, k)
+			}
 		}
-		slices.Sort(keys)
-		out[name] = keys
+		if len(keys) > 0 {
+			slices.Sort(keys)
+			out[name] = keys
+		}
 	}
-	return out, nil
+	return out, matched, nil
+}
+
+func addKey(sets map[string]map[string]bool, service, key string) {
+	if sets[service] == nil {
+		sets[service] = map[string]bool{}
+	}
+	sets[service][key] = true
+}
+
+// environmentKeys reads the names a service's environment: sets, in map form
+// (KEY: value, or KEY with no value) or list form (KEY=value, or KEY).
+func environmentKeys(n *yaml.Node) []string {
+	var keys []string
+	switch n.Kind {
+	case yaml.MappingNode:
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			keys = append(keys, n.Content[i].Value)
+		}
+	case yaml.SequenceNode:
+		for _, item := range n.Content {
+			if item.Kind == yaml.ScalarNode {
+				k, _, _ := strings.Cut(item.Value, "=")
+				keys = append(keys, k)
+			}
+		}
+	}
+	return keys
 }
 
 // envFilePaths reads env_file in any of its forms: a string, a list of

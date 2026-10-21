@@ -130,7 +130,7 @@ func runCompose(ctx context.Context, d Deps, in compose.Input) (err error) {
 	for _, w := range plan.Warnings {
 		_, _ = fmt.Fprintf(d.Stderr, "secretref: compose: warning: %s\n", w)
 	}
-	if plan.Override == "" && len(in.Keys) > 0 {
+	if !plan.Matched && len(in.Keys) > 0 {
 		_, _ = fmt.Fprintf(d.Stderr, "secretref: compose: no service uses %s; containers will see file values\n",
 			fileList(in.Keys, in.Cwd))
 	}

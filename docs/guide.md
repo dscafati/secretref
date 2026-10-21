@@ -337,8 +337,9 @@ secretref run -- docker compose up
    from an env file, because an env-file value can be built from a secret.
 2. For each service, it picks the keys that secretref resolved from an
    annotation, when the file that gave the key its final value is one the
-   service lists in `env_file:`. Compose reads every other key from
-   `env_file:` itself, as it would without secretref.
+   service lists in `env_file:`. It leaves out keys that the service sets in
+   its own `environment:`, in any compose file. Compose reads every other key
+   from `env_file:` itself, as it would without secretref.
 3. It writes a temporary override file with mode 0600. The file holds names
    only, in the form `KEY: ${KEY}`. It never holds a value.
 4. It starts `docker compose` with the override added. Compose fills in

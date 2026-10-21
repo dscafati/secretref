@@ -1,0 +1,5 @@
+# A later compose file adds to a service's environment.
+services:
+  map_form:
+    environment:
+      D: from-the-second-file

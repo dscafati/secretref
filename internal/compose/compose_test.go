@@ -453,3 +453,55 @@ func TestComposeFileErrorsNameTheVariable(t *testing.T) {
 		})
 	}
 }
+
+func readServices(t *testing.T, path string) map[string][]string {
+	t.Helper()
+	_, o := readOverride(t, path)
+	got := map[string][]string{}
+	for name, svc := range o.Services {
+		for k := range svc.Environment {
+			got[name] = append(got[name], k)
+		}
+		slices.Sort(got[name])
+	}
+	return got
+}
+
+func TestServiceEnvironmentKeepsItsKeys(t *testing.T) {
+	// A key the service sets in environment:, in any compose file and in
+	// either form, stays as the service sets it.
+	files := map[string]string{}
+	for _, name := range []string{"environment_base.yaml", "environment_extra.yaml"} {
+		data, err := os.ReadFile(filepath.Join("testdata", name)) //nolint:gosec // G304: a fixed testdata file.
+		if err != nil {
+			t.Fatal(err)
+		}
+		files[name] = string(data)
+	}
+	dir := project(t, files)
+	keys := map[string][]string{filepath.Join(dir, ".env"): {"A", "B", "C", "D", "E"}}
+	argv := []string{"docker", "compose", "-f", "environment_base.yaml", "-f", "environment_extra.yaml", "up"}
+	_, path := prepare(t, argv, nil, keys, dir)
+	want := map[string][]string{
+		"map_form":       {"C", "E"},
+		"list_form":      {"B", "D", "E"},
+		"sets_all":       {"E"},
+		"no_environment": {"A", "B", "C", "D", "E"},
+	}
+	if diff := cmp.Diff(want, readServices(t, path)); diff != "" {
+		t.Errorf("override services (-want +got):\n%s", diff)
+	}
+
+	// When the services set every key themselves, nothing is written.
+	dir = project(t, map[string]string{
+		"compose.yaml": "services:\n  web:\n    env_file: .env\n    environment: {A: x}\n",
+	})
+	keys = map[string][]string{filepath.Join(dir, ".env"): {"A"}}
+	plan, path := prepare(t, []string{"docker", "compose", "up"}, []string{"A=1"}, keys, dir)
+	if path != "" || plan.Override != "" {
+		t.Errorf("override written: %s", path)
+	}
+	if diff := cmp.Diff([]string{"A=1"}, plan.Env); diff != "" {
+		t.Errorf("env changed (-want +got):\n%s", diff)
+	}
+}
