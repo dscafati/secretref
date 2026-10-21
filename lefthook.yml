@@ -12,3 +12,8 @@ pre-push:
   commands:
     lint:
       run: make lint
+
+commit-msg:
+  commands:
+    trailers:
+      run: sh scripts/check-commit-msg.sh {1}
