@@ -1,6 +1,7 @@
 package envfile
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,9 +10,13 @@ import (
 // Load parses every file in paths and returns their entries in order. Entries
 // keep the order of paths, then the order within each file. Duplicate keys are
 // kept; resolving decides which one wins. Entry.File is the path as given.
-func Load(paths []string) ([]Entry, error) {
+// Load stops with ctx's error once ctx is done.
+func Load(ctx context.Context, paths []string) ([]Entry, error) {
 	var all []Entry
 	for _, p := range paths {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		entries, err := loadFile(p)
 		if err != nil {
 			return nil, err

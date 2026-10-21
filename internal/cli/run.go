@@ -74,7 +74,7 @@ func runRun(ctx context.Context, d Deps, o runOptions, dash int, argv []string) 
 	if err != nil {
 		return internalError(err)
 	}
-	entries, err := loadEntries(cwd, o.envFiles)
+	entries, err := loadEntries(ctx, cwd, o.envFiles)
 	if err != nil {
 		return err
 	}
@@ -171,7 +171,7 @@ func startResult(argv []string, code int, err error) error {
 
 // loadEntries reads the --env-file list, or .env and .env.local in cwd.
 // Paths become absolute so compose can match them against env_file.
-func loadEntries(cwd string, flagged []string) ([]envfile.Entry, error) {
+func loadEntries(ctx context.Context, cwd string, flagged []string) ([]envfile.Entry, error) {
 	var paths []string
 	for _, p := range flagged {
 		if !filepath.IsAbs(p) {
@@ -185,7 +185,7 @@ func loadEntries(cwd string, flagged []string) ([]envfile.Entry, error) {
 			return nil, usageError("no .env or .env.local found in %s", cwd)
 		}
 	}
-	entries, err := envfile.Load(paths)
+	entries, err := envfile.Load(ctx, paths)
 	var pe *envfile.ParseError
 	switch {
 	case errors.As(err, &pe):
