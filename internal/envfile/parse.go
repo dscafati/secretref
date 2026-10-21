@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/dscafati/secretref/internal/ref"
@@ -272,7 +273,7 @@ func (p *parser) afterQuote(rest string, lineNo int) error {
 // and "" otherwise.
 func knownScheme(raw string) string {
 	scheme, _, ok := strings.Cut(raw, "://")
-	if ok && (scheme == "aws-sm" || scheme == "gcp-sm" || scheme == "keyring") {
+	if ok && slices.Contains(ref.Schemes(), scheme) {
 		return " (scheme " + scheme + ")"
 	}
 	return ""
