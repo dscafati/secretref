@@ -50,11 +50,11 @@ fuzz:
 	done
 
 # Integration tests live in internal/provider/... behind the `integration` build
-# tag. They need a container runtime (CONTAINER=podman or docker) for LocalStack.
+# tag. The script starts the Moto Secrets Manager emulator with $(CONTAINER)
+# (podman or docker) and, on Linux with gnome-keyring, a throwaway Secret
+# Service, then removes both. CI runs the same target with CONTAINER=docker.
 test-integration:
-	@if grep -rlq '^//go:build integration' internal/provider 2>/dev/null; then \
-	  CONTAINER=$(CONTAINER) $(GO) test -tags integration ./internal/provider/...; \
-	else echo "test-integration: no integration tests yet, skipping"; fi
+	CONTAINER=$(CONTAINER) GO=$(GO) bash scripts/test-integration.sh
 
 # Proves the CGO_ENABLED=0 invariant: cross-compiles ./cmd/secretref for every
 # release target. `make test` cannot, because -race needs cgo. Binaries go to a

@@ -74,7 +74,16 @@ jobs:
           cache-dependency-path: |
             go.sum
             tools/go.sum
+      # make test-integration runs the keyring test on a private session bus
+      # with a throwaway gnome-keyring when these are installed.
+      - name: Install a Secret Service for the keyring test
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends gnome-keyring dbus
       - name: Integration tests
+        env:
+          # Fail instead of skipping if the throwaway keyring is not reachable.
+          SECRETREF_REQUIRE_KEYRING: "1"
         run: make test-integration CONTAINER=docker
 
   ci-gate:
