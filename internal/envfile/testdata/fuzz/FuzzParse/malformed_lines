@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("1X=y\x0aJUSTKEY\x0aexport KEY\x0aA=\x22x\x22 y\x0aB=2\x0a")

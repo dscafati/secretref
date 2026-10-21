@@ -14,7 +14,7 @@ Run `make` from the repository root. The Makefile is the source of truth for tar
 | `make fix` | Mechanical fixes only: gofumpt and linter autofixes. |
 | `make test` | Unit tests with `-race`. |
 | `make test-acceptance` | Real binary through testscript against `provider/fake`. |
-| `make fuzz` | Parser fuzz targets; `FUZZTIME` sets the duration. |
+| `make fuzz` | Parser fuzz targets; `FUZZTIME` sets the duration (CI: 30s per target). Seed corpora live in `internal/*/testdata/fuzz/`. |
 | `make test-integration` | `aws-sm` against a Moto container, and the keyring contract against a throwaway keyring (Linux, when gnome-keyring is installed) or the OS keyring; `CONTAINER` selects podman or docker. `gcp-sm` has no integration test; its unit tests use an httptest fake. |
 | `make build-all` | `CGO_ENABLED=0` build for linux, darwin, windows on amd64 and arm64. CI runs it. |
 | `make docs` | Regenerate `docs/reference/` from cobra and `docs/decisions/index.md` from the records. |

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("P=pa$$word\x0aQ=\x22\x5c$x ${P:-d}\x22\x0aR=abc$def\x0a")

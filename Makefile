@@ -38,15 +38,20 @@ test-acceptance:
 	@if [ -d acceptance ]; then $(GO) test -race -count=1 -tags acceptance ./acceptance/...; \
 	else echo "test-acceptance: no acceptance directory yet, skipping"; fi
 
-# Runs every Fuzz* target in ./internal/envfile and ./internal/ref.
+# Runs every Fuzz* target in ./internal/envfile and ./internal/ref for
+# $(FUZZTIME) each. Fails if a package does not build or has no Fuzz target, so
+# a broken list never passes as "nothing to fuzz".
 fuzz:
 	@for pkg in envfile ref; do \
-	  if [ -d internal/$$pkg ]; then \
-	    for t in $$($(GO) test -list '^Fuzz' ./internal/$$pkg | awk '/^Fuzz/'); do \
-	      echo "fuzz $$pkg $$t"; \
-	      $(GO) test ./internal/$$pkg -run '^$$' -fuzz "^$$t$$" -fuzztime $(FUZZTIME) || exit 1; \
-	    done; \
+	  if ! list=$$($(GO) test -list '^Fuzz' ./internal/$$pkg 2>&1); then \
+	    echo "fuzz: go test -list failed for internal/$$pkg:"; echo "$$list"; exit 1; \
 	  fi; \
+	  targets=$$(printf '%s\n' "$$list" | awk '/^Fuzz/'); \
+	  if [ -z "$$targets" ]; then echo "fuzz: no Fuzz targets in internal/$$pkg"; exit 1; fi; \
+	  for t in $$targets; do \
+	    echo "fuzz $$pkg $$t"; \
+	    $(GO) test ./internal/$$pkg -run '^$$' -fuzz "^$$t$$" -fuzztime $(FUZZTIME) || exit 1; \
+	  done; \
 	done
 
 # Integration tests live in internal/provider/... behind the `integration` build
