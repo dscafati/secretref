@@ -109,16 +109,24 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha }}
           BEFORE: ${{ github.event.before }}
           AFTER: ${{ github.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
+          # A new branch has an all-zero BEFORE, and a force push can name a
+          # BEFORE commit the clone does not have. Then check every pushed
+          # commit that is not on the default branch, and at least the tip.
           if [ "$EVENT" = "pull_request" ]; then
             range="$BASE..$HEAD"
-          elif [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-            range="$AFTER^!"
-          else
+          elif [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] &&
+            git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
             range="$BEFORE..$AFTER"
+          else
+            range="origin/$DEFAULT_BRANCH..$AFTER"
+            echo "BEFORE is unknown; checking $range"
           fi
+          shas=$(git rev-list "$range") || exit 1
+          [ -n "$shas" ] || shas=$AFTER
           status=0
-          for sha in $(git rev-list "$range"); do
+          for sha in $shas; do
             if ! git log -n 1 --format=%B "$sha" | sh scripts/check-commit-msg.sh - 2>/dev/null; then
               echo "::error::Commit $sha has an AI co-author or Claude-Session trailer"
               status=1
