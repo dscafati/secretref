@@ -33,7 +33,7 @@ func (*Provider) Resolve(ctx context.Context, r ref.Ref) (secret.Secret, error) 
 	}
 	v, err := gokeyring.Get(r.Location, r.Name)
 	if err != nil {
-		return secret.Secret{}, mapErr(r, err)
+		return secret.Secret{}, mapErr(err)
 	}
 	return secret.New([]byte(v)), nil
 }
@@ -44,7 +44,7 @@ func (*Provider) Set(ctx context.Context, r ref.Ref, s secret.Secret) error {
 		return err
 	}
 	if err := gokeyring.Set(r.Location, r.Name, string(s.Reveal())); err != nil {
-		return mapErr(r, err)
+		return mapErr(err)
 	}
 	return nil
 }
@@ -55,7 +55,7 @@ func (*Provider) Delete(ctx context.Context, r ref.Ref) error {
 		return err
 	}
 	if err := gokeyring.Delete(r.Location, r.Name); err != nil {
-		return mapErr(r, err)
+		return mapErr(err)
 	}
 	return nil
 }
@@ -65,16 +65,16 @@ func check(ctx context.Context, r ref.Ref) error {
 		return fmt.Errorf("keyring provider cannot handle scheme %q: %w", r.Scheme, provider.ErrInvalid)
 	}
 	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("%s: %w: %w", r.Raw, provider.ErrUnavailable, err)
+		return fmt.Errorf("%w: %w", err, provider.ErrUnavailable)
 	}
 	return nil
 }
 
 // mapErr drops the backend's error text: it is not needed to act on the
 // failure and could echo backend internals.
-func mapErr(r ref.Ref, err error) error {
+func mapErr(err error) error {
 	if errors.Is(err, gokeyring.ErrNotFound) {
-		return fmt.Errorf("%s: %w", r.Raw, provider.ErrNotFound)
+		return provider.ErrNotFound
 	}
-	return fmt.Errorf("%s: OS keyring failed: %w", r.Raw, provider.ErrUnavailable)
+	return fmt.Errorf("OS keyring failed: %w", provider.ErrUnavailable)
 }

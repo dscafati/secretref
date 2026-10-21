@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,6 +40,7 @@ func Run(t *testing.T, p provider.Provider, setup Setup) {
 		if !errors.Is(err, provider.ErrNotFound) {
 			t.Fatalf("Resolve(missing) kind = %q, want %q", provider.Kind(err), provider.ErrNotFound)
 		}
+		assertOmitsRef(t, err, setup.Missing)
 	})
 
 	// Limitation: this subtest resolves Setup.Missing rather than a stored
@@ -58,10 +60,21 @@ func Run(t *testing.T, p provider.Provider, setup Setup) {
 			if err == nil {
 				t.Fatal("Resolve with canceled context returned nil error")
 			}
+			assertOmitsRef(t, err, setup.Missing)
 		case <-time.After(10 * time.Second):
 			t.Fatal("Resolve with canceled context did not return")
 		}
 	})
+}
+
+// assertOmitsRef fails when err's text contains the reference. Callers print
+// the key and the reference next to every provider error, so repeating it
+// there only adds noise.
+func assertOmitsRef(t *testing.T, err error, r ref.Ref) {
+	t.Helper()
+	if strings.Contains(err.Error(), r.Raw) {
+		t.Fatalf("error text %q repeats the reference %s", err.Error(), r.Raw)
+	}
 }
 
 func assertRoundTrip(t *testing.T, p provider.Provider, setup Setup, name, value string) {

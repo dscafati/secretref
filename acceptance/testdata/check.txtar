@@ -4,7 +4,7 @@ env DB_PASSWORD=from-env
 exit-code 3 secretref check
 stdout '^KEY +REF +STATUS$'
 stdout '^DB_PASSWORD +keyring://app/db_password +ok$'
-stdout '^MISSING +keyring://app/missing +not found: '
+stdout '^MISSING +keyring://app/missing +not found$'
 ! stdout PLAIN
 no-canary
 
@@ -14,7 +14,7 @@ no-canary
 
 # run reports the same failure on stderr and starts nothing.
 exit-code 3 secretref run -- printenv-helper MISSING
-stderr '^secretref: MISSING  keyring://app/missing  not found: '
+stderr '^secretref: MISSING  keyring://app/missing  not found$'
 ! exists child-env.txt
 no-canary
 

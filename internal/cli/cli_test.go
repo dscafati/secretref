@@ -237,15 +237,15 @@ func TestRunEnvFileFlag(t *testing.T) {
 func TestRunFailure(t *testing.T) {
 	h := newHarness(t)
 	h.write(".env", annotatedEnv+"# secretref: keyring://app/c\nC=x\n")
-	h.fake.Fail(refB, fmt.Errorf("%s: %w", refB, provider.ErrDenied))
+	h.fake.Fail(refB, fmt.Errorf("AWS error AccessDeniedException: %w", provider.ErrDenied))
 	h.expect(3, "run", "--", "tool")
 	if len(h.calls) != 0 {
 		t.Fatal("command started despite a failure")
 	}
 	lines := strings.Split(strings.TrimSuffix(h.stderr.String(), "\n"), "\n")
 	want := []string{
-		"secretref: B  keyring://app/b  denied: keyring://app/b",
-		"secretref: C  keyring://app/c  not found: keyring://app/c",
+		"secretref: B  keyring://app/b  denied: AWS error AccessDeniedException",
+		"secretref: C  keyring://app/c  not found",
 	}
 	if diff := cmp.Diff(want, lines); diff != "" {
 		t.Errorf("stderr lines (-want +got):\n%s", diff)
@@ -368,7 +368,7 @@ func TestCheck(t *testing.T) {
 	h.expect(3, "check")
 	want := "KEY  REF              STATUS\n" +
 		"B    keyring://app/b  ok\n" +
-		"C    keyring://app/c  not found: keyring://app/c\n"
+		"C    keyring://app/c  not found\n"
 	if diff := cmp.Diff(want, h.stdout.String()); diff != "" {
 		t.Errorf("stdout (-want +got):\n%s", diff)
 	}

@@ -86,4 +86,15 @@ func TestBackendFailureIsUnavailable(t *testing.T) {
 	if !errors.Is(err, provider.ErrUnavailable) {
 		t.Fatalf("Resolve kind = %q, want unavailable", provider.Kind(err))
 	}
+	if want := "OS keyring failed: unavailable"; err.Error() != want {
+		t.Fatalf("Resolve error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestNotFoundText(t *testing.T) {
+	gokeyring.MockInit()
+	_, err := keyring.New().Resolve(context.Background(), mustRef(t, "keyring://svc/acct"))
+	if err == nil || err.Error() != "not found" {
+		t.Fatalf("Resolve error = %v, want \"not found\"", err)
+	}
 }

@@ -173,7 +173,29 @@ func TestErrorMapping(t *testing.T) {
 			if strings.Contains(err.Error(), canaryBody) {
 				t.Fatalf("error text includes response body: %q", err.Error())
 			}
+			if strings.Contains(err.Error(), tt.ref) {
+				t.Fatalf("error text repeats the reference: %q", err.Error())
+			}
 		})
+	}
+}
+
+// TestErrorText pins the full text: the reason first, the kind last, and no
+// reference, so the CLI renders "denied: AWS error AccessDeniedException".
+func TestErrorText(t *testing.T) {
+	e, srv := newEmulator(t)
+	e.binary["blob"] = []byte{0xff}
+	p := testProvider(t, srv)
+	tests := []struct{ ref, want string }{
+		{"aws-sm://us-east-1/nope", "AWS error ResourceNotFoundException: not found"},
+		{"aws-sm://us-east-1/denied", "AWS error AccessDeniedException: denied"},
+		{"aws-sm://us-east-1/blob", "binary secrets are not supported: invalid"},
+	}
+	for _, tt := range tests {
+		_, err := p.Resolve(context.Background(), mustRef(t, tt.ref))
+		if err == nil || err.Error() != tt.want {
+			t.Errorf("Resolve(%s) error = %v, want %q", tt.ref, err, tt.want)
+		}
 	}
 }
 

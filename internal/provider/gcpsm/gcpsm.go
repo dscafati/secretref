@@ -65,7 +65,7 @@ func (p *Provider) Resolve(ctx context.Context, r ref.Ref) (secret.Secret, error
 	}
 	client, err := p.httpClient(ctx)
 	if err != nil {
-		return secret.Secret{}, fmt.Errorf("%s: %w: %s", r.Raw, provider.ErrDenied, noADCMessage)
+		return secret.Secret{}, fmt.Errorf("%s: %w", noADCMessage, provider.ErrDenied)
 	}
 
 	version := r.Opts["version"]
@@ -77,22 +77,22 @@ func (p *Provider) Resolve(ctx context.Context, r ref.Ref) (secret.Secret, error
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, http.NoBody)
 	if err != nil {
-		return secret.Secret{}, fmt.Errorf("%s: building request: %w", r.Raw, provider.ErrInvalid)
+		return secret.Secret{}, fmt.Errorf("building request: %w", provider.ErrInvalid)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
 		var re *oauth2.RetrieveError
 		if errors.As(err, &re) {
-			return secret.Secret{}, fmt.Errorf("%s: %w: %s", r.Raw, provider.ErrDenied, noADCMessage)
+			return secret.Secret{}, fmt.Errorf("%s: %w", noADCMessage, provider.ErrDenied)
 		}
 		// The *url.Error text holds the URL only, never the response.
-		return secret.Secret{}, fmt.Errorf("%s: request failed: %w", r.Raw, provider.ErrUnavailable)
+		return secret.Secret{}, fmt.Errorf("request failed: %w", provider.ErrUnavailable)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxBody))
-		return secret.Secret{}, statusError(r, resp.StatusCode)
+		return secret.Secret{}, statusError(resp.StatusCode)
 	}
 
 	var body struct {
@@ -101,14 +101,14 @@ func (p *Provider) Resolve(ctx context.Context, r ref.Ref) (secret.Secret, error
 		} `json:"payload"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBody*2)).Decode(&body); err != nil {
-		return secret.Secret{}, fmt.Errorf("%s: malformed response: %w", r.Raw, provider.ErrInvalid)
+		return secret.Secret{}, fmt.Errorf("malformed response: %w", provider.ErrInvalid)
 	}
 	data, err := base64.StdEncoding.DecodeString(body.Payload.Data)
 	if err != nil {
 		data, err = base64.URLEncoding.DecodeString(body.Payload.Data)
 	}
 	if err != nil {
-		return secret.Secret{}, fmt.Errorf("%s: payload is not base64: %w", r.Raw, provider.ErrInvalid)
+		return secret.Secret{}, fmt.Errorf("payload is not base64: %w", provider.ErrInvalid)
 	}
 	return secret.New(data), nil
 }
@@ -134,7 +134,7 @@ func (p *Provider) httpClient(ctx context.Context) (*http.Client, error) {
 	return c, nil
 }
 
-func statusError(r ref.Ref, status int) error {
+func statusError(status int) error {
 	var kind error
 	switch status {
 	case http.StatusNotFound:
@@ -146,5 +146,5 @@ func statusError(r ref.Ref, status int) error {
 	default:
 		kind = provider.ErrUnavailable
 	}
-	return fmt.Errorf("%s: Secret Manager returned HTTP %d: %w", r.Raw, status, kind)
+	return fmt.Errorf("Secret Manager returned HTTP %d: %w", status, kind)
 }

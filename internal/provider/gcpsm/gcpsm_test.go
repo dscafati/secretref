@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,7 +20,12 @@ import (
 	"github.com/dscafati/secretref/internal/ref"
 )
 
-const canaryBody = "CANARY-RESPONSE-BODY"
+const (
+	canaryBody = "CANARY-RESPONSE-BODY"
+	// noADCText is the whole error for missing or rejected credentials: the
+	// reason first and the kind last, without the reference.
+	noADCText = "no Google Application Default Credentials (run: gcloud auth application-default login): denied"
+)
 
 // backend is a minimal Secret Manager REST emulator.
 type backend struct {
@@ -160,6 +166,9 @@ func TestErrorMapping(t *testing.T) {
 			if strings.Contains(err.Error(), canaryBody) {
 				t.Fatalf("error text includes response body: %q", err.Error())
 			}
+			if want := fmt.Sprintf("Secret Manager returned HTTP %d: %s", tt.status, tt.want); err.Error() != want {
+				t.Fatalf("error text = %q, want %q", err.Error(), want)
+			}
 		})
 	}
 }
@@ -215,8 +224,8 @@ func TestMissingADCIsDenied(t *testing.T) {
 	if !errors.Is(err, provider.ErrDenied) {
 		t.Fatalf("kind = %q, want denied (err=%v)", provider.Kind(err), err)
 	}
-	if !strings.Contains(err.Error(), "no Google Application Default Credentials (run: gcloud auth application-default login)") {
-		t.Fatalf("error text = %q", err.Error())
+	if want := noADCText; err.Error() != want {
+		t.Fatalf("error text = %q, want %q", err.Error(), want)
 	}
 }
 
@@ -239,7 +248,7 @@ func TestTokenRefreshFailureIsDenied(t *testing.T) {
 	if !errors.Is(err, provider.ErrDenied) {
 		t.Fatalf("kind = %q, want denied (err=%v)", provider.Kind(err), err)
 	}
-	if !strings.Contains(err.Error(), "gcloud auth application-default login") || strings.Contains(err.Error(), canaryBody) {
-		t.Fatalf("error = %q", err.Error())
+	if err.Error() != noADCText {
+		t.Fatalf("error = %q, want %q", err.Error(), noADCText)
 	}
 }

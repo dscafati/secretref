@@ -2,7 +2,6 @@ package fake
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"sync"
 
@@ -63,7 +62,7 @@ func (f *Fake) Resolve(_ context.Context, r ref.Ref) (secret.Secret, error) {
 	f.calls = append(f.calls, r.Raw)
 	res, ok := f.results[r.Raw]
 	if !ok {
-		return secret.Secret{}, fmt.Errorf("%s: %w", r.Raw, provider.ErrNotFound)
+		return secret.Secret{}, provider.ErrNotFound
 	}
 	return res.value, res.err
 }
@@ -81,7 +80,7 @@ func (f *Fake) Delete(_ context.Context, r ref.Ref) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if _, ok := f.results[r.Raw]; !ok {
-		return fmt.Errorf("%s: %w", r.Raw, provider.ErrNotFound)
+		return provider.ErrNotFound
 	}
 	delete(f.results, r.Raw)
 	return nil

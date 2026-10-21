@@ -48,4 +48,8 @@ func TestRegistryLookupUnknown(t *testing.T) {
 	if !errors.Is(err, provider.ErrInvalid) {
 		t.Fatalf("Lookup(vault) error = %v, want it to wrap ErrInvalid", err)
 	}
+	// The caller prints the reference, which names the scheme.
+	if want := "no provider for this scheme: invalid"; err.Error() != want {
+		t.Fatalf("Lookup(vault) error = %q, want %q", err.Error(), want)
+	}
 }
