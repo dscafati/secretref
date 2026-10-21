@@ -24,12 +24,15 @@ body:
     id: provider
     attributes:
       label: Provider
+      description: The reference scheme involved, if any.
       options:
-        - aws
-        - gcp
+        - Not provider-specific
+        - aws-sm
+        - gcp-sm
         - keyring
+      default: 0
     validations:
-      required: true
+      required: false
   - type: textarea
     id: what-happened
     attributes:
