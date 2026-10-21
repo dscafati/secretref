@@ -14,9 +14,13 @@ import (
 	"syscall"
 )
 
-// ErrCommandNotFound reports that the command is not on the child's PATH or is
-// not executable.
+// ErrCommandNotFound reports that the command is not on the child's PATH.
 var ErrCommandNotFound = errors.New("command not found")
+
+// ErrCommandNotExecutable reports that the command exists but cannot be run:
+// it is not executable, it is a directory, or it is a script without a
+// shebang line (ENOEXEC). Shells exit 126 for this.
+var ErrCommandNotExecutable = errors.New("command not executable")
 
 // ErrReplaceUnsupported reports that the OS cannot replace the current
 // process; callers use Spawn instead.
@@ -50,8 +54,11 @@ func spawn(ctx context.Context, argv, env []string, forward func(*os.Process, os
 	defer signal.Stop(sigs)
 
 	if err := cmd.Start(); err != nil {
-		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrPermission) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return 0, fmt.Errorf("%s: %w", argv[0], ErrCommandNotFound)
+		}
+		if errors.Is(err, fs.ErrPermission) || errors.Is(err, syscall.ENOEXEC) {
+			return 0, fmt.Errorf("%s: %w", argv[0], ErrCommandNotExecutable)
 		}
 		return 0, fmt.Errorf("start %s: %w", argv[0], err)
 	}
@@ -120,21 +127,43 @@ func lookPath(argv, env []string) (string, error) {
 	if strings.ContainsAny(name, separators()) {
 		p, err := exec.LookPath(name)
 		if err != nil {
-			return "", notFound
+			return "", classify(name, err, notFound)
 		}
 		return p, nil
 	}
+	var denied error
 	for _, dir := range filepath.SplitList(envValue(env, "PATH")) {
 		// SECURITY: empty and relative PATH entries are skipped so that a bare
 		// name never runs a file from the working directory by accident.
 		if dir == "" || !filepath.IsAbs(dir) {
 			continue
 		}
-		if p, err := exec.LookPath(filepath.Join(dir, name)); err == nil {
+		p, err := exec.LookPath(filepath.Join(dir, name))
+		if err == nil {
 			return p, nil
 		}
+		if denied == nil && errors.Is(err, fs.ErrPermission) {
+			denied = classify(name, err, notFound)
+		}
+	}
+	if denied != nil {
+		return "", denied
 	}
 	return "", notFound
+}
+
+// classify maps a LookPath error: a file that exists but cannot run (not
+// executable, or a directory) is ErrCommandNotExecutable, anything else is
+// notFound.
+func classify(name string, err error, notFound error) error {
+	if errors.Is(err, fs.ErrPermission) {
+		return fmt.Errorf("%s: %w", name, ErrCommandNotExecutable)
+	}
+	// Go's LookPath may report a directory as not found.
+	if fi, statErr := os.Stat(name); statErr == nil && fi.IsDir() {
+		return fmt.Errorf("%s: %w", name, ErrCommandNotExecutable)
+	}
+	return notFound
 }
 
 func separators() string {

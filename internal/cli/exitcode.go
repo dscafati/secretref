@@ -12,6 +12,7 @@ const (
 	exitInternal = 1
 	exitUsage    = 2
 	exitResolve  = 3
+	exitNotExec  = 126
 	exitNotFound = 127
 )
 

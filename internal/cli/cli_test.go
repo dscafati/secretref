@@ -302,6 +302,16 @@ func TestRunCommandNotFound(t *testing.T) {
 	}
 }
 
+func TestRunCommandNotExecutable(t *testing.T) {
+	h := newHarness(t)
+	h.write(".env", annotatedEnv)
+	h.replaceErr = fmt.Errorf("tool: %w", procexec.ErrCommandNotExecutable)
+	h.expect(126, "run", "--", "tool")
+	if got := h.stderr.String(); got != "secretref: command not executable: tool\n" {
+		t.Errorf("stderr = %q", got)
+	}
+}
+
 func TestRunStartError(t *testing.T) {
 	h := newHarness(t)
 	h.write(".env", annotatedEnv)
