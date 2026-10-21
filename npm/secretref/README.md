@@ -1,10 +1,11 @@
 # secretref
 
-secretref starts a command with real secrets in its environment. You mark each
-secret in your `.env` file with a comment that says where the value lives.
-Your app code does not change. Supported stores: AWS Secrets Manager
-(`aws-sm`), Google Cloud Secret Manager (`gcp-sm`), and the OS keyring
-(`keyring`).
+Keep secrets out of your `.env` files. You add a comment that says where each
+secret lives, and `secretref run` starts your command with the real values.
+Your team's workflow, apps, and repo stay as they are. Teammates without
+secretref see a normal `.env` file. Supported stores: AWS Secrets Manager,
+Google Cloud Secret Manager, and the OS keyring (macOS Keychain, Windows
+Credential Manager, Linux Secret Service).
 
 Early preview. Expect breaking changes before 1.0.
 
