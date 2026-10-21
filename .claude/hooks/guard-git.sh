@@ -11,7 +11,43 @@ input=$(cat)
 if command -v jq >/dev/null 2>&1; then
   cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // empty')
 else
-  cmd=$(printf '%s' "$input" | sed -n 's/.*"command"[[:space:]]*:[[:space:]]*"\(\([^"\\]\|\\.\)*\)".*/\1/p' | sed 's/\\n/\n/g; s/\\"/"/g')
+  # POSIX awk only: BSD sed has no \| alternation and no \n in replacements, so
+  # the JSON string is decoded by a small scanner instead of a regexp.
+  cmd=$(printf '%s' "$input" | awk '
+    { all = all (NR > 1 ? "\n" : "") $0 }
+    END {
+      key = "\"command\""
+      pos = 1
+      while ((i = index(substr(all, pos), key)) > 0) {
+        j = pos + i - 1 + length(key)
+        # Skip blanks, then require a colon, blanks and the opening quote.
+        while (j <= length(all) && index(" \t\r\n", substr(all, j, 1)) > 0) j++
+        if (substr(all, j, 1) == ":") {
+          j++
+          while (j <= length(all) && index(" \t\r\n", substr(all, j, 1)) > 0) j++
+          if (substr(all, j, 1) == "\"") { start = j + 1; found = 1; break }
+        }
+        pos = pos + i - 1 + length(key)
+      }
+      if (!found) exit
+      out = ""
+      n = length(all)
+      for (k = start; k <= n; k++) {
+        c = substr(all, k, 1)
+        if (c == "\"") break
+        if (c == "\\") {
+          k++
+          e = substr(all, k, 1)
+          if (e == "n") c = "\n"
+          else if (e == "t") c = "\t"
+          else if (e == "r") c = "\r"
+          else if (e == "\"" || e == "\\" || e == "/") c = e
+          else c = "\\" e
+        }
+        out = out c
+      }
+      printf "%s", out
+    }')
 fi
 
 block() {
