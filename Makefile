@@ -5,12 +5,12 @@ CONTAINER ?= podman
 FUZZTIME ?= 30s
 
 .DEFAULT_GOAL := check
-.PHONY: check fix fmt-check lint tidy-check test test-acceptance fuzz test-integration build-all docs docs-check adr-index adr-check skills-check snapshot
+.PHONY: reveal-check check fix fmt-check lint tidy-check test test-acceptance fuzz test-integration build-all docs docs-check adr-index adr-check skills-check snapshot
 
 # Every release target. Keep in sync with builds[].goos/goarch in .goreleaser.yaml.
 BUILD_TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 
-check: fmt-check lint tidy-check test test-acceptance docs-check adr-check skills-check
+check: fmt-check lint tidy-check test test-acceptance docs-check adr-check skills-check reveal-check
 
 fmt-check:
 	@out=$$($(TOOL) gofumpt -l .); \
@@ -88,6 +88,9 @@ adr-index:
 adr-check:
 	@if [ -f scripts/check-adr-index.sh ]; then sh scripts/check-adr-index.sh; \
 	else echo "adr-check: scripts/check-adr-index.sh not present yet, skipping"; fi
+
+reveal-check:
+	@sh scripts/check-reveal.sh
 
 skills-check:
 	sh scripts/check-skills-link.sh

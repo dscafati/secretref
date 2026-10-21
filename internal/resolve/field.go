@@ -16,6 +16,7 @@ import (
 // because they can quote input bytes.
 func extractField(s secret.Secret, name string) (secret.Secret, error) {
 	var obj map[string]json.RawMessage
+	// SECURITY: Unmarshal needs the raw bytes; its errors are discarded below.
 	if err := json.Unmarshal(s.Reveal(), &obj); err != nil || obj == nil {
 		return secret.Secret{}, fmt.Errorf("secret is not a JSON object: %w", provider.ErrInvalid)
 	}

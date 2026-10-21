@@ -34,7 +34,7 @@ linter.
 
 `make check` runs formatting, lint, `go mod tidy` checks, unit tests,
 acceptance tests, the generated-docs check, the decision-index check, and the
-skills-link check. It does not run fuzz or integration tests. Run it before every
+skills-link check, and the Reveal-comment check. It does not run fuzz or integration tests. Run it before every
 push.
 
 ## Tests
