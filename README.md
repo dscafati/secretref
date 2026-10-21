@@ -41,7 +41,8 @@ secretref run -- npm start
 
 ```sh
 brew install --cask dscafati/tap/secretref
-scoop bucket add dscafati https://github.com/dscafati/scoop-bucket && scoop install dscafati/secretref
+scoop bucket add dscafati https://github.com/dscafati/scoop-bucket
+scoop install dscafati/secretref
 npm install -g secretref
 go install github.com/dscafati/secretref/cmd/secretref@latest
 ```
@@ -49,8 +50,9 @@ go install github.com/dscafati/secretref/cmd/secretref@latest
 ## How it works
 
 - `run` resolves the annotated keys with your own credentials when the command
-  starts and adds only those keys to its environment. Other variables are left
-  to your app's own dotenv loader.
+  starts. It adds those keys, and any value built from them such as
+  `DATABASE_URL=postgres://app:${DB_PASSWORD}@db/app`, to the command's
+  environment. Other variables are left to your app's own dotenv loader.
 - A variable already set in your environment wins, so CI and production need
   no change.
 - Resolved values are never written to disk, stdout, stderr, or logs.
