@@ -5,7 +5,7 @@ updates:
     schedule:
       interval: weekly
     cooldown:
-      default-days: 3
+      default-days: 7
     groups:
       go-dependencies:
         patterns: ["*"]
@@ -18,7 +18,7 @@ updates:
     schedule:
       interval: weekly
     cooldown:
-      default-days: 3
+      default-days: 7
     groups:
       go-tools:
         patterns: ["*"]
@@ -31,7 +31,7 @@ updates:
     schedule:
       interval: weekly
     cooldown:
-      default-days: 3
+      default-days: 7
     groups:
       github-actions:
         patterns: ["*"]
