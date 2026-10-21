@@ -106,7 +106,7 @@ func TestFailuresCollected(t *testing.T) {
 	f.Put("keyring://s/ok", "v")
 	f.Fail("keyring://s/b", fmt.Errorf("b: %w", provider.ErrDenied))
 	entries := []envfile.Entry{
-		{File: ".env", Key: "Z", Value: "zf", Ref: mustRef(t, "keyring://s/b")},
+		{File: ".env.local", Key: "Z", Value: "zf", Ref: mustRef(t, "keyring://s/b")},
 		{File: ".env", Key: "OK", Value: "", Ref: mustRef(t, "keyring://s/ok")},
 		{File: ".env", Key: "A", Value: "af", Ref: mustRef(t, "keyring://s/missing")},
 	}
@@ -131,8 +131,17 @@ func TestFailuresCollected(t *testing.T) {
 	if diff := cmp.Diff(map[string]string{"Z": "zf", "OK": "v", "A": "af"}, values(res)); diff != "" {
 		t.Errorf("Vars (-want +got):\n%s", diff)
 	}
-	if !strings.Contains(res.Warnings[0], "A") || !strings.Contains(res.Warnings[1], "Z") {
-		t.Errorf("Warnings = %v", res.Warnings)
+	type warning struct{ Key, Ref, Kind, File string }
+	var gotWarnings []warning
+	for _, w := range res.Warnings {
+		gotWarnings = append(gotWarnings, warning{w.Key, w.Ref.Raw, provider.Kind(w.Err), w.File})
+	}
+	wantWarnings := []warning{
+		{"A", "keyring://s/missing", "not found", ".env"},
+		{"Z", "keyring://s/b", "denied", ".env.local"},
+	}
+	if diff := cmp.Diff(wantWarnings, gotWarnings); diff != "" {
+		t.Errorf("Warnings (-want +got):\n%s", diff)
 	}
 	fellBack := map[string]bool{}
 	for _, v := range res.Vars {
@@ -338,14 +347,13 @@ func TestCycleOrderFollowsFile(t *testing.T) {
 }
 
 func TestWarningsOrderedByKey(t *testing.T) {
-	// "A!: ..." sorts before "A: ..." as whole strings, but key A sorts before A!.
 	f := fake.New()
 	res := newResolver(f, noEnv, resolve.Options{AllowMissing: true}).Resolve(context.Background(), []envfile.Entry{
 		{File: ".env", Key: "A!", Ref: mustRef(t, "keyring://s/1")},
 		{File: ".env", Key: "A", Ref: mustRef(t, "keyring://s/2")},
 	})
-	if len(res.Warnings) != 2 || !strings.HasPrefix(res.Warnings[0], "A: ") || !strings.HasPrefix(res.Warnings[1], "A!: ") {
-		t.Errorf("Warnings = %q", res.Warnings)
+	if len(res.Warnings) != 2 || res.Warnings[0].Key != "A" || res.Warnings[1].Key != "A!" {
+		t.Errorf("Warnings = %+v", res.Warnings)
 	}
 }
 

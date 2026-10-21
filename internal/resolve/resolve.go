@@ -48,11 +48,18 @@ type Failure struct {
 	Err error
 }
 
-// Result is the outcome of Resolve.
+// Warning is an annotated key whose reference failed while AllowMissing kept
+// the value written in File instead.
+type Warning struct {
+	Failure
+	File string
+}
+
+// Result is the outcome of Resolve. Failures and Warnings are sorted by key.
 type Result struct {
 	Vars     []Var
 	Failures []Failure
-	Warnings []string
+	Warnings []Warning
 }
 
 // Resolver resolves entries through a provider registry.
@@ -124,27 +131,23 @@ func (r *Resolver) Resolve(ctx context.Context, entries []envfile.Entry) Result 
 	}
 
 	var res Result
-	var warned []Failure
 	errs := r.resolveAll(ctx, toResolve)
 	for i, s := range toResolve {
 		err := errs[i]
 		if err == nil {
 			continue
 		}
+		f := Failure{Key: s.entry.Key, Ref: *s.entry.Ref, Err: err}
 		if r.opts.AllowMissing {
 			s.kind, s.fellBack = kindPlain, true
-			warned = append(warned, Failure{Key: s.entry.Key, Ref: *s.entry.Ref, Err: err})
+			res.Warnings = append(res.Warnings, Warning{Failure: f, File: s.entry.File})
 			continue
 		}
 		s.fail = true
-		res.Failures = append(res.Failures, Failure{Key: s.entry.Key, Ref: *s.entry.Ref, Err: err})
+		res.Failures = append(res.Failures, f)
 	}
 	slices.SortFunc(res.Failures, func(a, b Failure) int { return strings.Compare(a.Key, b.Key) })
-	slices.SortFunc(warned, func(a, b Failure) int { return strings.Compare(a.Key, b.Key) })
-	for _, w := range warned {
-		res.Warnings = append(res.Warnings, fmt.Sprintf("%s: %s: %s: %v; using the value from %s",
-			w.Key, w.Ref.Raw, provider.Kind(w.Err), w.Err, slots[w.Key].entry.File))
-	}
+	slices.SortFunc(res.Warnings, func(a, b Warning) int { return strings.Compare(a.Key, b.Key) })
 
 	lookup := lookupFunc(slots, r)
 	for _, key := range order {
