@@ -5,7 +5,10 @@ CONTAINER ?= podman
 FUZZTIME ?= 30s
 
 .DEFAULT_GOAL := check
-.PHONY: check fix fmt-check lint tidy-check test test-acceptance fuzz test-integration docs docs-check adr-index adr-check skills-check snapshot
+.PHONY: check fix fmt-check lint tidy-check test test-acceptance fuzz test-integration build-all docs docs-check adr-index adr-check skills-check snapshot
+
+# Every release target. Keep in sync with builds[].goos/goarch in .goreleaser.yaml.
+BUILD_TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 
 check: fmt-check lint tidy-check test test-acceptance docs-check adr-check skills-check
 
@@ -47,11 +50,22 @@ fuzz:
 	done
 
 # Integration tests live in internal/provider/... behind the `integration` build
-# tag. They need a container runtime (CONTAINER=podman or docker) for LocalStack.
+# tag. The script starts the Moto Secrets Manager emulator with $(CONTAINER)
+# (podman or docker) and, on Linux with gnome-keyring, a throwaway Secret
+# Service, then removes both. CI runs the same target with CONTAINER=docker.
 test-integration:
-	@if grep -rlq '^//go:build integration' internal/provider 2>/dev/null; then \
-	  CONTAINER=$(CONTAINER) $(GO) test -tags integration ./internal/provider/...; \
-	else echo "test-integration: no integration tests yet, skipping"; fi
+	CONTAINER=$(CONTAINER) GO=$(GO) bash scripts/test-integration.sh
+
+# Proves the CGO_ENABLED=0 invariant: cross-compiles ./cmd/secretref for every
+# release target. `make test` cannot, because -race needs cgo. Binaries go to a
+# temporary directory that is always removed.
+build-all:
+	@out=$$(mktemp -d); trap 'rm -rf "$$out"' EXIT; \
+	for t in $(BUILD_TARGETS); do \
+	  os=$${t%/*}; arch=$${t#*/}; \
+	  echo "build-all: $$os/$$arch"; \
+	  CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GO) build -trimpath -o "$$out/secretref-$$os-$$arch" ./cmd/secretref || exit 1; \
+	done
 
 docs: adr-index
 	@if [ -d cmd/gen-docs ]; then $(GO) run ./cmd/gen-docs; \
@@ -78,5 +92,8 @@ adr-check:
 skills-check:
 	sh scripts/check-skills-link.sh
 
+# Local snapshot of every artifact and package-manager manifest. Signing and
+# SBOMs need cosign and syft on PATH, so they are skipped here; the release
+# workflow's dry run (workflow_dispatch) exercises them.
 snapshot:
-	$(TOOL) goreleaser release --snapshot --clean
+	$(TOOL) goreleaser release --snapshot --clean --skip=sign,sbom

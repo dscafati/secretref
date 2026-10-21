@@ -6,6 +6,8 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"net"
+	"net/url"
 	"os"
 	"testing"
 
@@ -17,12 +19,20 @@ import (
 	"github.com/dscafati/secretref/internal/ref"
 )
 
-// TestLocalStack runs the contract against a Secrets Manager emulator at
-// AWS_ENDPOINT_URL (for example LocalStack).
-func TestLocalStack(t *testing.T) {
-	if os.Getenv("AWS_ENDPOINT_URL") == "" {
-		t.Skip("AWS_ENDPOINT_URL not set; start LocalStack and set it to run this test")
+// TestMotoServer runs the contract against a Secrets Manager emulator at
+// AWS_ENDPOINT_URL. `make test-integration` starts Moto in a container and sets
+// it. The test refuses any endpoint that is not on a loopback address, so it
+// cannot reach a real AWS account.
+func TestMotoServer(t *testing.T) {
+	endpoint := os.Getenv("AWS_ENDPOINT_URL")
+	if endpoint == "" {
+		if os.Getenv("SECRETREF_REQUIRE_AWS_EMULATOR") != "" {
+			t.Fatal("AWS_ENDPOINT_URL not set but SECRETREF_REQUIRE_AWS_EMULATOR is; the emulator did not start")
+		}
+		t.Skip("AWS_ENDPOINT_URL not set; run `make test-integration` to start the emulator")
 	}
+	requireLoopback(t, endpoint)
+
 	const region = "us-east-1"
 	ctx := context.Background()
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
@@ -62,4 +72,21 @@ func TestLocalStack(t *testing.T) {
 			return r
 		}(),
 	})
+}
+
+// requireLoopback fails the test unless endpoint names localhost or a loopback IP.
+func requireLoopback(t *testing.T, endpoint string) {
+	t.Helper()
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		t.Fatalf("AWS_ENDPOINT_URL is not a URL: %v", err)
+	}
+	host := u.Hostname()
+	if host == "localhost" {
+		return
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return
+	}
+	t.Fatalf("AWS_ENDPOINT_URL host %q is not a loopback address; integration tests never call a real cloud", host)
 }

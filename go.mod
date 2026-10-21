@@ -2,6 +2,8 @@ module github.com/dscafati/secretref
 
 go 1.26.0
 
+toolchain go1.26.10
+
 require (
 	github.com/aws/aws-sdk-go-v2 v1.47.3
 	github.com/aws/aws-sdk-go-v2/config v1.33.9
