@@ -134,6 +134,11 @@ func TestCommandNotFound(t *testing.T) {
 			if !errors.Is(err, procexec.ErrCommandNotFound) {
 				t.Errorf("Spawn error = %v, want ErrCommandNotFound", err)
 			}
+			// Windows cannot replace a process: Replace returns
+			// ErrReplaceUnsupported there before it looks up the command.
+			if runtime.GOOS == "windows" {
+				return
+			}
 			if err := procexec.Replace([]string{cmd}, env); !errors.Is(err, procexec.ErrCommandNotFound) {
 				t.Errorf("Replace error = %v, want ErrCommandNotFound", err)
 			}
