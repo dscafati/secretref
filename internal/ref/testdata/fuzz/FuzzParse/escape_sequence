@@ -1,0 +1,2 @@
+go test fuzz v1
+string("keyring://a/b\x1b[2J\x07")

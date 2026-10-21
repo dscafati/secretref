@@ -42,7 +42,7 @@ trailing newline. Only keyring:// references are accepted.`,
 			if err := w.Set(ctx, r, s); err != nil {
 				return writeFailed("store", r, err)
 			}
-			_, _ = fmt.Fprintf(d.Stderr, "stored %s\n", r.Raw)
+			_, _ = fmt.Fprintf(d.Stderr, "stored %s\n", r.String())
 			return nil
 		},
 	}
@@ -62,7 +62,7 @@ func keyringWriter(d Deps, raw string) (ref.Ref, provider.Writer, error) {
 		return ref.Ref{}, nil, usageError("%v", err)
 	}
 	if r.Scheme != "keyring" {
-		return ref.Ref{}, nil, usageError("only keyring:// references can be written, got %s", r.Raw)
+		return ref.Ref{}, nil, usageError("only keyring:// references can be written, got %s", r.String())
 	}
 	w, ok := d.Writers[r.Scheme]
 	if !ok {
@@ -76,9 +76,9 @@ func keyringWriter(d Deps, raw string) (ref.Ref, provider.Writer, error) {
 // answers ends as a timeout instead of a hang.
 func writeFailed(op string, r ref.Ref, err error) error {
 	if errors.Is(err, context.DeadlineExceeded) {
-		return internalError(fmt.Errorf("%s %s: timed out after %s", op, r.Raw, defaultTimeout))
+		return internalError(fmt.Errorf("%s %s: timed out after %s", op, r, defaultTimeout))
 	}
-	return internalError(fmt.Errorf("%s %s: %w", op, r.Raw, err))
+	return internalError(fmt.Errorf("%s %s: %w", op, r, err))
 }
 
 // readValue reads the value with hidden input on a terminal, else from stdin
@@ -86,7 +86,7 @@ func writeFailed(op string, r ref.Ref, err error) error {
 func readValue(d Deps, r ref.Ref) ([]byte, error) {
 	var value []byte
 	if d.IsTerminal() {
-		_, _ = fmt.Fprintf(d.Stderr, "Value for %s: ", r.Raw)
+		_, _ = fmt.Fprintf(d.Stderr, "Value for %s: ", r.String())
 		v, err := d.ReadPassword()
 		_, _ = fmt.Fprintln(d.Stderr)
 		if err != nil {

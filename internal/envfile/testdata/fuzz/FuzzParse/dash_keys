@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("H-I=dash\x0amy-app.port=8080\x0a")

@@ -31,14 +31,23 @@ type Options struct {
 
 // Var is one variable for the child environment.
 type Var struct {
-	Key     string
-	Value   secret.Secret
-	File    string
+	Key   string
+	Value secret.Secret
+	File  string
+	// Ref is the key's annotation, nil when the key is not annotated. It is
+	// set even when the key was not resolved (FromEnv or FellBack).
 	Ref     *ref.Ref
 	FromEnv bool
 	// FellBack is true when the reference failed and AllowMissing kept the
 	// file's value instead.
 	FellBack bool
+	// Injected is true when run gives the variable to the child by default:
+	// the key resolved from its reference, or it is a plain key whose value
+	// expands, through ${...}, from such a key, directly or through other
+	// keys. Keys from the environment, keys that fell back, and other plain
+	// keys are not injected; the app's own dotenv loader reads them. See
+	// decision 0016.
+	Injected bool
 }
 
 // Failure is an annotated key that did not resolve.
@@ -98,6 +107,7 @@ type slot struct {
 	state    int // plain expansion: 0 todo, 1 in progress, 2 done
 	fail     bool
 	fellBack bool
+	derived  bool // plain: the expanded value used a resolved or derived key
 }
 
 // Resolve resolves entries. Later entries win over earlier ones with the same
@@ -149,7 +159,7 @@ func (r *Resolver) Resolve(ctx context.Context, entries []envfile.Entry) Result 
 	slices.SortFunc(res.Failures, func(a, b Failure) int { return strings.Compare(a.Key, b.Key) })
 	slices.SortFunc(res.Warnings, func(a, b Warning) int { return strings.Compare(a.Key, b.Key) })
 
-	lookup := lookupFunc(slots, r)
+	x := &expander{r: r, slots: slots}
 	for _, key := range order {
 		s := slots[key]
 		if s.fail {
@@ -158,28 +168,38 @@ func (r *Resolver) Resolve(ctx context.Context, entries []envfile.Entry) Result 
 		v := Var{Key: key, File: s.entry.File, Ref: s.entry.Ref, FromEnv: s.kind == kindEnv, FellBack: s.fellBack}
 		if s.kind == kindSecret {
 			v.Value = s.sec
+			v.Injected = true
 		} else {
-			v.Value = secret.New([]byte(r.valueOf(s, lookup)))
+			v.Value = secret.New([]byte(x.valueOf(s)))
+			v.Injected = s.kind == kindPlain && s.derived
 		}
 		res.Vars = append(res.Vars, v)
 	}
 	return res
 }
 
-// lookupFunc returns the variable lookup used during expansion: the final file
-// variables first, then the process environment. Names that are not in the file
-// set, and keys whose resolution failed (their value is unknown, so there is
-// nothing to substitute), fall back to the process environment. With IgnoreEnv
-// the file variable still wins over the environment for names it defines.
-func lookupFunc(slots map[string]*slot, r *Resolver) func(string) (string, bool) {
-	var self func(string) (string, bool)
-	self = func(name string) (string, bool) {
-		if s, ok := slots[name]; ok && !s.fail {
-			return r.valueOf(s, self), true
-		}
-		return r.lookupEnv(name)
+// expander computes the final values of the slots.
+type expander struct {
+	r     *Resolver
+	slots map[string]*slot
+}
+
+// lookup returns the value of name during the expansion of s: the final file
+// variable first, then the process environment. Names that are not in the
+// file set, and keys whose resolution failed (their value is unknown, so there
+// is nothing to substitute), fall back to the process environment. With
+// IgnoreEnv the file variable still wins over the environment for names it
+// defines. It marks s derived when name is a resolved or derived key.
+func (x *expander) lookup(s *slot, name string) (string, bool) {
+	t, ok := x.slots[name]
+	if !ok || t.fail {
+		return x.r.lookupEnv(name)
 	}
-	return self
+	v := x.valueOf(t)
+	if t.kind == kindSecret || (t.kind == kindPlain && t.derived) {
+		s.derived = true
+	}
+	return v, true
 }
 
 // valueOf returns the final string value of s. Plain values are expanded once;
@@ -187,7 +207,7 @@ func lookupFunc(slots map[string]*slot, r *Resolver) func(string) (string, bool)
 //
 // SECURITY: resolved secrets and process-environment values are returned as
 // they are and never expanded, so a secret containing "${X}" stays literal.
-func (r *Resolver) valueOf(s *slot, lookup func(string) (string, bool)) string {
+func (x *expander) valueOf(s *slot) string {
 	switch s.kind {
 	case kindEnv:
 		return s.value
@@ -207,7 +227,7 @@ func (r *Resolver) valueOf(s *slot, lookup func(string) (string, bool)) string {
 	if s.entry.Quote == envfile.QuoteSingle {
 		s.value = s.entry.Value
 	} else {
-		s.value = expand(s.entry.Value, lookup)
+		s.value = expand(s.entry.Value, func(name string) (string, bool) { return x.lookup(s, name) })
 	}
 	s.state = 2
 	return s.value
@@ -306,11 +326,12 @@ func (r *Resolver) mapErr(err error) error {
 	return err
 }
 
-// Environ returns base plus the Vars that are not FromEnv, as KEY=value.
-func (res Result) Environ(base []string) []string {
+// Environ returns base plus, as KEY=value, the Injected Vars, or with all
+// every Var that is not FromEnv.
+func (res Result) Environ(base []string, all bool) []string {
 	out := slices.Clone(base)
 	for _, v := range res.Vars {
-		if v.FromEnv {
+		if v.FromEnv || (!all && !v.Injected) {
 			continue
 		}
 		// SECURITY: this value goes to the child process environment and nowhere else.

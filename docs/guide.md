@@ -6,6 +6,7 @@ every flag, see the [command reference](reference/secretref.md).
 
 - [Annotations](#annotations)
 - [Which files load](#which-files-load)
+- [What run injects](#what-run-injects)
 - [Env file syntax](#env-file-syntax)
 - [Variable expansion](#variable-expansion)
 - [Dotenv loaders that override](#dotenv-loaders-that-override)
@@ -39,6 +40,10 @@ API_KEY=dev-key
 - A reference that does not parse is an error with the file and line, exit 2.
   The message does not repeat the annotation text, in case a secret was pasted
   there by mistake.
+- A reference is printable text. A control character, an invisible or
+  direction-changing character, or invalid UTF-8 makes it invalid. So does a
+  location or name segment that is `.` or `..`. See
+  [decision 0018](decisions/0018-printable-references-without-dot-segments.md).
 - The value after `=` is the fallback for people who run the app without
   secretref, and for `--allow-missing`. It may be empty.
 
@@ -77,46 +82,119 @@ To use the secret from the file instead, unset the variable first:
 env -u DB_PASSWORD secretref run -- npm start
 ```
 
-`run` gives the child the whole existing environment plus every variable from
-the files, annotated or not. See
-[decision 0004](decisions/0004-inject-all-variables-environment-wins.md).
+## What run injects
+
+`run` gives the command the whole existing environment plus, by default:
+
+- each annotated variable whose reference resolved, and
+- each variable whose value is built from one of those with `${...}`,
+  directly or through other variables.
+
+```dotenv
+# secretref: keyring://myapp/DB_PASSWORD
+DB_PASSWORD=localdev
+DATABASE_URL=postgres://app:${DB_PASSWORD}@localhost:5432/app
+LOG_LEVEL=info
+```
+
+Here the command gets `DB_PASSWORD` and `DATABASE_URL` with the real password.
+It does not get `LOG_LEVEL` from secretref. Your app's own dotenv loader reads
+`LOG_LEVEL` from the file, as it does without secretref. This keeps
+mode-specific files working: if your framework loads `.env.development` over
+`.env`, its values still win, because secretref did not put `.env`'s values in
+the environment first.
+
+`run --all` gives the command every variable from the files, annotated or not.
+Use it when the app has no dotenv loader of its own, such as a Go binary that
+calls `os.Getenv` or a shell script:
+
+```sh
+secretref run --all -- ./server
+```
+
+In both modes, a variable already in the environment wins. A key whose
+reference failed under `--allow-missing` is not injected by default; the app's
+loader reads the same value from the file.
+
+`check` is not affected. See
+[decision 0016](decisions/0016-inject-annotated-keys-by-default.md).
 
 ## Env file syntax
 
 - `KEY=value` lines, with an optional `export ` prefix.
-- A key starts with a letter or `_` and continues with letters, digits, `_`, or
-  `.`.
+- A key starts with a letter or `_` and continues with letters, digits, `_`,
+  `.`, or `-`.
 - Unquoted values are trimmed. A `#` with a space or tab before it starts a
   comment. A `#` with no space before it is part of the value.
 - Single-quoted values are literal. No escapes are processed, and no variables
   are expanded.
 - Double-quoted values process `\n`, `\r`, `\t`, `\"`, `\\`, and `\$`.
 - Quoted values may span several lines.
-- Backtick quotes are not supported.
+- Backtick quotes are not supported. A backtick is an ordinary character.
 - LF and CRLF line endings both work.
+- A line that does not parse is skipped, as other dotenv loaders skip it.
+  secretref prints `secretref: warning: <file>:<line>: skipped unparseable line`
+  on stderr and goes on. The warning never repeats the line, in case a secret
+  was pasted there. A line directly below an annotation must parse: if it does
+  not, secretref names the file and line and exits 2.
 
 Quote any value that contains `#`, so every dotenv loader reads it the same
 way.
 
+### Differences from other dotenv loaders
+
+Dotenv loaders do not agree on every detail. Where they differ, secretref
+follows python-dotenv and Docker Compose. Write files that every loader reads
+the same way:
+
+| In the file | secretref | Differs in | Portable form |
+|---|---|---|---|
+| `A=abc#def` | `abc#def` | Node `dotenv` strips it to `abc`. | `A="abc#def"` |
+| ``A=`text` `` | `` `text` `` with the backticks | Node `dotenv` reads backticks as quotes. | `A="text"` or `A='text'` |
+| `export KEY` | Skipped with a warning. | Shells export an existing `KEY`. | `export KEY=value` |
+| `A=pa$word` | `pa$word` | Node `dotenv-expand` expands `$word`. | `A='pa$word'` |
+| `URL=${HOST}:80` | Expands `HOST`. | Loaders without expansion keep `${HOST}`. | Write the value out. |
+| `my-key=x` | Accepted. | Some loaders reject `-` or `.` in keys, and `${my-key}` does not expand anywhere, Compose included. | `MY_KEY=x` |
+
+A line that does not parse is skipped with a warning. See
+[Env file syntax](#env-file-syntax).
+
 ## Variable expansion
 
 Unquoted and double-quoted values expand variables. Single-quoted values do
-not.
+not. The rules follow Docker Compose's interpolation, so `$` means the same
+to secretref and to Compose.
 
 | Form | Result |
 |---|---|
-| `${NAME}` or `$NAME` | The value of `NAME`, or the empty string if it is not defined. |
+| `${NAME}` | The value of `NAME`, or the empty string if it is not defined. |
 | `${NAME:-default}` | The value of `NAME`, or `default` if `NAME` is unset or empty. |
+| `$$` | A literal `$`. |
 | `\$` | A literal `$`. |
 
+| In the file | The child gets |
+|---|---|
+| `URL=pg://${USER}@db` with `USER=app` | `pg://app@db` |
+| `PASSWORD=pa$$word` | `pa$word` |
+| `PRICE=abc$def` | `abc$def` |
+| `LITERAL=$${USER}` | `${USER}` |
+| `QUOTED="cost: \$5"` | `cost: $5` |
+| `SINGLE='${USER}'` | `${USER}` |
+
+- A bare `$NAME`, without braces, is not expanded. It stays as written.
+  Use `${NAME}` to expand a variable.
+- Only names made of letters, digits, and `_` expand. A key with `.` or `-`
+  in it cannot be used in `${...}`; `${my-key}` stays as written.
 - secretref looks a name up in the final file variables first, after the
   precedence rules above, then in the process environment. `${HOME}` works.
 - The order of lines does not matter. A value may refer to a variable defined
   later in the file.
-- The default in `${NAME:-default}` is literal text. `${A:-$B}` gives the two
-  characters `$B` when `A` is unset.
-- `$` followed by anything other than a name stays as written. So does `${`
-  with no closing `}`.
+- The default in `${NAME:-default}` is literal text up to the first `}`.
+  `${A:-$B}` gives the two characters `$B` when `A` is unset, and defaults do
+  not nest.
+- Any other `$` stays as written. So does `${` with no closing `}`, and so do
+  the Compose forms that secretref does not support, such as
+  `${NAME-default}`, `${NAME:?error}`, and `${NAME:+other}`.
 - If variables refer to each other in a cycle, the reference that closes the
   cycle expands to the empty string. It is not an error.
 
@@ -280,9 +358,13 @@ number.
 
 - `--env-file <file>`: load this file instead of `.env` and `.env.local`.
   Repeatable.
-- `--allow-missing`: when a reference fails for any reason, use the value from
+- `--all`: give the command every variable from the files, not only the
+  resolved ones and those built from them. See
+  [What run injects](#what-run-injects).
+- `--allow-missing`: when a reference fails for any reason, keep the value from
   the file and print a warning on stderr. Without it, any failure stops
-  secretref with exit 3 and the command does not start.
+  secretref with exit 3 and the command does not start. The key is injected
+  only with `--all`; otherwise the app's dotenv loader reads the file value.
 - `--timeout <duration>`: the time limit for resolving all references
   together, for example `10s` or `2m`. The default is `30s`. References still
   pending at the limit fail as `unavailable`.
@@ -342,11 +424,11 @@ secretref run -- docker compose up
    directory or a parent directory. secretref reads `COMPOSE_FILE` and
    `COMPOSE_PATH_SEPARATOR` only from the environment it started in, never
    from an env file, because an env-file value can be built from a secret.
-2. For each service, it picks the keys that secretref resolved from an
-   annotation, when the file that gave the key its final value is one the
-   service lists in `env_file:`. It leaves out keys that the service sets in
-   its own `environment:`, in any compose file. Compose reads every other key
-   from `env_file:` itself, as it would without secretref.
+2. For each service, it picks the keys that secretref injects (see
+   [What run injects](#what-run-injects)), when the file that gave the key its
+   final value is one the service lists in `env_file:`. It leaves out keys that
+   the service sets in its own `environment:`, in any compose file. Compose
+   reads every other key from `env_file:` itself, as it would without secretref.
 3. It writes a temporary override file with mode 0600. The file holds names
    only, in the form `KEY: ${KEY}`. It never holds a value.
 4. It starts `docker compose` with the override added. Compose fills in
@@ -431,3 +513,7 @@ A reference that does not parse, such as one with an unknown scheme, is caught
 when the file loads. It is a usage error, exit 2, not a resolution failure.
 
 `secretref run --verbose` shows which keys resolved from which references.
+
+If your command does not see a variable that has no annotation, it has no
+dotenv loader of its own, or the loader does not read that file. Use
+`secretref run --all`. See [What run injects](#what-run-injects).

@@ -39,6 +39,36 @@ func TestParseRef(t *testing.T) {
 			in:   "aws-sm://r/x#a?b",
 			want: ref.Ref{Scheme: "aws-sm", Location: "r", Name: "x", Field: "a?b", Raw: "aws-sm://r/x#a?b"},
 		},
+		{
+			in:   "aws-sm://r/a.b/..c/.d",
+			want: ref.Ref{Scheme: "aws-sm", Location: "r", Name: "a.b/..c/.d", Raw: "aws-sm://r/a.b/..c/.d"},
+		},
+		{
+			in:   "keyring://café/ü...",
+			want: ref.Ref{Scheme: "keyring", Location: "café", Name: "ü...", Raw: "keyring://café/ü..."},
+		},
+		// Dot segments.
+		{in: "aws-sm://r/../x", wantErr: true},
+		{in: "aws-sm://r/a/./x", wantErr: true},
+		{in: "aws-sm://r/a/..", wantErr: true},
+		{in: "aws-sm://../x", wantErr: true},
+		{in: "gcp-sm://p/..", wantErr: true},
+		{in: "gcp-sm://./s", wantErr: true},
+		{in: "keyring://svc/.", wantErr: true},
+		{in: "keyring://../x", wantErr: true},
+		// Control and non-printable characters.
+		{in: "keyring://a/b\x1b[31m", wantErr: true},
+		{in: "keyring://a\x00/b", wantErr: true},
+		{in: "keyring://a/b\tc", wantErr: true},
+		{in: "keyring://a/b\x7f", wantErr: true},
+		{in: "keyring://a/\xff", wantErr: true},
+		{in: "keyring://a/b\u0085", wantErr: true},
+		{in: "keyring://a/b\u202e", wantErr: true},
+		{in: "aws-sm://r/x?profile=a\nb", wantErr: true},
+		{in: "aws-sm://r/x#f\rx", wantErr: true},
+		{in: "aws-sm://r/x?profile=a%0Ab", wantErr: true},
+		{in: "aws-sm://r/x?profile=a%1B%5B2J", wantErr: true},
+		{in: "\x1b]0;x\x07keyring://a/b", wantErr: true},
 		{in: "aws-sm://r/x/", wantErr: true},
 		{in: "aws-sm://r//x", wantErr: true},
 		{in: "aws-sm://r/x//y", wantErr: true},
@@ -91,6 +121,20 @@ func TestErrorMessage(t *testing.T) {
 	e := &ref.Error{Raw: "vault://a/b", Msg: "unknown scheme"}
 	if got, want := e.Error(), "invalid reference vault://a/b: unknown scheme"; got != want {
 		t.Errorf("Error() = %q, want %q", got, want)
+	}
+}
+
+func TestOutputCannotCarryEscapes(t *testing.T) {
+	const raw = "keyring://a/b\x1b[2J\x07\xff"
+	e := &ref.Error{Raw: raw, Msg: "bad"}
+	if got, want := e.Error(), `invalid reference "keyring://a/b\x1b[2J\a\xff": bad`; got != want {
+		t.Errorf("Error() = %q, want %q", got, want)
+	}
+	if got, want := (ref.Ref{Raw: raw}).String(), `"keyring://a/b\x1b[2J\a\xff"`; got != want {
+		t.Errorf("String() = %q, want %q", got, want)
+	}
+	if got := (ref.Ref{Raw: "keyring://café/b"}).String(); got != "keyring://café/b" {
+		t.Errorf("printable String() = %q", got)
 	}
 }
 

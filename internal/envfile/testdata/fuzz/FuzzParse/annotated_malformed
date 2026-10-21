@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("# secretref: keyring://a/b\x0ahunter2 pasted\x0a")

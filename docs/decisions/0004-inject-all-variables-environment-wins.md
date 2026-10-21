@@ -1,6 +1,6 @@
 # 0004. Inject all variables; the existing environment wins
 
-Status: Accepted
+Status: Superseded by 0016
 
 Date: 2026-10-20
 

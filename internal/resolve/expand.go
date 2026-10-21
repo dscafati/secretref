@@ -2,16 +2,21 @@ package resolve
 
 import "strings"
 
-// expand replaces ${NAME}, ${NAME:-default} and $NAME in s using lookup, and
-// turns \$ into a literal $. Undefined names expand to the empty string. The
-// default in ${NAME:-default} is literal text up to the first "}": it is not
-// expanded, so ${A:-$B} yields the characters "$B" when A is unset.
+// expand replaces ${NAME} and ${NAME:-default} in s using lookup, as Docker
+// Compose does. A bare $NAME is literal text, $$ is a literal $, and \$ is a
+// literal $. Undefined names expand to the empty string. The default in
+// ${NAME:-default} is literal text up to the first "}": it is not expanded, so
+// ${A:-${B}} is not nested and ${A:-$B} yields the characters "$B" when A is
+// unset. Any other "$" stays as written.
 func expand(s string, lookup func(string) (string, bool)) string {
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		switch {
 		case c == '\\' && i+1 < len(s) && s[i+1] == '$':
+			b.WriteByte('$')
+			i++
+		case c == '$' && i+1 < len(s) && s[i+1] == '$':
 			b.WriteByte('$')
 			i++
 		case c == '$' && i+1 < len(s) && s[i+1] == '{':
@@ -32,14 +37,6 @@ func expand(s string, lookup func(string) (string, bool)) string {
 				b.WriteString(v)
 			}
 			i += 2 + end
-		case c == '$' && i+1 < len(s) && isNameStart(s[i+1]):
-			j := i + 2
-			for j < len(s) && isNameChar(s[j]) {
-				j++
-			}
-			v, _ := lookup(s[i+1 : j])
-			b.WriteString(v)
-			i = j - 1
 		default:
 			b.WriteByte(c)
 		}

@@ -1,0 +1,23 @@
+[
+  {
+    "line": 1,
+    "key": "H-I",
+    "value": "dash",
+    "quote": "none",
+    "ref": null
+  },
+  {
+    "line": 2,
+    "key": "my-app.port",
+    "value": "8080",
+    "quote": "none",
+    "ref": null
+  },
+  {
+    "line": 3,
+    "key": "_x-1",
+    "value": "y",
+    "quote": "none",
+    "ref": null
+  }
+]

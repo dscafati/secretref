@@ -47,7 +47,7 @@ func runCheck(cmd *cobra.Command, d Deps, o checkOptions) error {
 	if err != nil {
 		return internalError(err)
 	}
-	entries, err := loadEntries(cwd, o.envFiles)
+	entries, err := loadEntries(cmd.Context(), d.Stderr, cwd, o.envFiles)
 	if err != nil {
 		return err
 	}
@@ -60,11 +60,11 @@ func runCheck(cmd *cobra.Command, d Deps, o checkOptions) error {
 	var rows []checkRow
 	for _, v := range res.Vars {
 		if v.Ref != nil {
-			rows = append(rows, checkRow{v.Key, v.Ref.Raw, "ok"})
+			rows = append(rows, checkRow{v.Key, v.Ref.String(), "ok"})
 		}
 	}
 	for _, f := range res.Failures {
-		rows = append(rows, checkRow{f.Key, f.Ref.Raw, describe(f.Err)})
+		rows = append(rows, checkRow{f.Key, f.Ref.String(), describe(f.Err)})
 	}
 	slices.SortFunc(rows, func(a, b checkRow) int { return strings.Compare(a.key, b.key) })
 

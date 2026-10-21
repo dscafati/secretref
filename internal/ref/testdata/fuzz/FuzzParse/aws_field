@@ -1,0 +1,2 @@
+go test fuzz v1
+string("aws-sm://eu-west-1/prod/db?profile=dev#password")

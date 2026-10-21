@@ -14,7 +14,7 @@ A record has one of these statuses:
 | 0001 | [Record architecture decisions](0001-record-architecture-decisions.md) | Accepted |
 | 0002 | [Resolve at process start; never write values to disk](0002-resolve-at-process-start.md) | Accepted |
 | 0003 | [Annotations are comments; files stay valid dotenv](0003-annotations-are-comments.md) | Accepted |
-| 0004 | [Inject all variables; the existing environment wins](0004-inject-all-variables-environment-wins.md) | Accepted |
+| 0004 | [Inject all variables; the existing environment wins](0004-inject-all-variables-environment-wins.md) | Superseded by 0016 |
 | 0005 | [Go with pure-Go dependencies, no CGO](0005-pure-go-no-cgo.md) | Accepted |
 | 0006 | [Manual dependency injection](0006-manual-dependency-injection.md) | Superseded by 0015 |
 | 0007 | [Writes only to the local keyring](0007-writes-only-to-local-keyring.md) | Accepted |
@@ -26,4 +26,6 @@ A record has one of these statuses:
 | 0013 | [Sequential decision numbers](0013-sequential-decision-numbers.md) | Accepted |
 | 0014 | [Generated decision index](0014-generated-decision-index.md) | Accepted |
 | 0015 | [Manual dependency injection; immutable package-level values allowed](0015-manual-dependency-injection-immutable-globals.md) | Accepted |
+| 0016 | [Inject annotated keys by default](0016-inject-annotated-keys-by-default.md) | Accepted |
 | 0017 | [Provider interfaces live in the provider package](0017-provider-interfaces-live-in-the-provider-package.md) | Accepted |
+| 0018 | [References are printable text without dot segments](0018-printable-references-without-dot-segments.md) | Accepted |

@@ -34,6 +34,7 @@ type runOptions struct {
 	allowMissing bool
 	timeout      time.Duration
 	verbose      bool
+	all          bool
 }
 
 func newRunCmd(d Deps) *cobra.Command {
@@ -42,14 +43,19 @@ func newRunCmd(d Deps) *cobra.Command {
 		Use:   "run [flags] -- <command> [args...]",
 		Short: "Resolve annotated variables and start a command",
 		Long: `Run loads .env then .env.local (or the --env-file list), resolves annotated
-variables that are not already set in the environment, and starts the command
-with every file variable in its environment. Variables already set win.
+variables that are not already set in the environment, and starts the command.
+
+By default the command gets the resolved variables and the variables whose
+values are built from them with ${...}. Other variables are left to the app's
+own dotenv loader. --all gives the command every variable from the files.
+Variables already set in the environment always win.
 
 On Unix secretref replaces itself with the command. On Windows, and for
 "docker compose", it starts the command as a child, forwards interrupts, and
 exits with the child's exit code.`,
 		Example: `  secretref run -- npm start
   secretref run --env-file .env.staging -- ./server
+  secretref run --all -- ./server
   secretref run -- docker compose up`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runRun(cmd.Context(), d, o, cmd.ArgsLenAtDash(), args)
@@ -57,9 +63,10 @@ exits with the child's exit code.`,
 	}
 	f := cmd.Flags()
 	f.StringArrayVar(&o.envFiles, "env-file", nil, "env `file` to load; repeatable; replaces .env and .env.local")
-	f.BoolVar(&o.allowMissing, "allow-missing", false, "use the file's value for references that fail, with a warning")
+	f.BoolVar(&o.allowMissing, "allow-missing", false, "warn and keep the file's value for references that fail, instead of exiting 3")
 	f.DurationVar(&o.timeout, "timeout", defaultTimeout, "time limit for resolving all references")
 	f.BoolVar(&o.verbose, "verbose", false, "log which key resolved from which reference (never values)")
+	f.BoolVar(&o.all, "all", false, "give the command every variable from the files, not only resolved ones and those built from them")
 	return cmd
 }
 
@@ -74,7 +81,7 @@ func runRun(ctx context.Context, d Deps, o runOptions, dash int, argv []string) 
 	if err != nil {
 		return internalError(err)
 	}
-	entries, err := loadEntries(cwd, o.envFiles)
+	entries, err := loadEntries(ctx, d.Stderr, cwd, o.envFiles)
 	if err != nil {
 		return err
 	}
@@ -98,10 +105,10 @@ func runRun(ctx context.Context, d Deps, o runOptions, dash int, argv []string) 
 		logResolved(newLogger(d.Stderr), res)
 	}
 
-	env := res.Environ(d.Environ())
+	env := res.Environ(d.Environ(), o.all)
 	if compose.Detect(argv) {
 		return runCompose(ctx, d, compose.Input{
-			Argv: argv, Environ: env, Parent: d.Environ(), Keys: keysByFile(res), Cwd: cwd,
+			Argv: argv, Environ: env, Parent: d.Environ(), Keys: keysByFile(res, o.all), Cwd: cwd,
 		})
 	}
 	if runtime.GOOS == "windows" {
@@ -176,9 +183,10 @@ func startResult(argv []string, code int, err error) error {
 	return nil
 }
 
-// loadEntries reads the --env-file list, or .env and .env.local in cwd.
-// Paths become absolute so compose can match them against env_file.
-func loadEntries(cwd string, flagged []string) ([]envfile.Entry, error) {
+// loadEntries reads the --env-file list, or .env and .env.local in cwd, and
+// prints a warning on stderr for each skipped line. Paths become absolute so
+// compose can match them against env_file.
+func loadEntries(ctx context.Context, stderr io.Writer, cwd string, flagged []string) ([]envfile.Entry, error) {
 	var paths []string
 	for _, p := range flagged {
 		if !filepath.IsAbs(p) {
@@ -192,7 +200,7 @@ func loadEntries(cwd string, flagged []string) ([]envfile.Entry, error) {
 			return nil, usageError("no .env or .env.local found in %s", cwd)
 		}
 	}
-	entries, err := envfile.Load(paths)
+	entries, warnings, err := envfile.Load(ctx, paths)
 	var pe *envfile.ParseError
 	switch {
 	case errors.As(err, &pe):
@@ -204,17 +212,23 @@ func loadEntries(cwd string, flagged []string) ([]envfile.Entry, error) {
 	case err != nil:
 		return nil, internalError(err)
 	}
+	for _, w := range warnings {
+		w.File = relPath(cwd, w.File)
+		_, _ = fmt.Fprintf(stderr, "secretref: warning: %s\n", w)
+	}
 	return entries, nil
 }
 
-// keysByFile maps each loaded file to the keys resolved from an annotation
-// whose final value came from that file. Compose passes only these through
-// the override, and only to services that list that file; it reads every
-// other key from env_file itself.
-func keysByFile(res resolve.Result) map[string][]string {
+// keysByFile maps each loaded file to the keys whose final value came from
+// that file and that the child receives from secretref (Injected, or every
+// non-environment key with all). Compose passes only these through the
+// override, and only to services that list that file; it reads every other
+// key from env_file itself. It must name exactly the keys Environ added: a
+// named key missing from the environment would blank the env_file value.
+func keysByFile(res resolve.Result, all bool) map[string][]string {
 	out := map[string][]string{}
 	for _, v := range res.Vars {
-		if v.Ref != nil && !v.FromEnv && !v.FellBack {
+		if !v.FromEnv && (all || v.Injected) {
 			out[v.File] = append(out[v.File], v.Key)
 		}
 	}
@@ -223,7 +237,7 @@ func keysByFile(res resolve.Result) map[string][]string {
 
 // failureLine renders a failed key as "<key>  <ref>  <kind>[: <reason>]".
 func failureLine(f resolve.Failure) string {
-	return f.Key + "  " + f.Ref.Raw + "  " + describe(f.Err)
+	return f.Key + "  " + f.Ref.String() + "  " + describe(f.Err)
 }
 
 // describe renders a resolution error as "<kind>: <reason>". Provider errors
@@ -262,7 +276,7 @@ func newLogger(w io.Writer) *slog.Logger {
 func logResolved(log *slog.Logger, res resolve.Result) {
 	for _, v := range res.Vars {
 		if v.Ref != nil && !v.FromEnv && !v.FellBack {
-			log.Info(fmt.Sprintf("resolved %s from %s", v.Key, v.Ref.Raw))
+			log.Info(fmt.Sprintf("resolved %s from %s", v.Key, v.Ref.String()))
 		}
 	}
 }

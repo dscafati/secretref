@@ -20,9 +20,11 @@ LOG_LEVEL=info
 secretref run -- node server.js
 ```
 
-- secretref resolves annotated variables with your own credentials. The
-  resolved values replace the file's values.
-- Variables without an annotation pass through unchanged.
+- secretref resolves annotated variables with your own credentials and gives
+  your command the real values, plus any value built from them with `${...}`.
+- Other variables are left to your app's own dotenv loader, so mode-specific
+  files such as `.env.development` keep working. `run --all` passes every
+  variable instead.
 - Variables already set in your environment win and are not resolved, so CI
   and production need no change.
 - Without secretref the file is still a normal `.env` file. Dotenv loaders read
@@ -93,7 +95,8 @@ This example uses the OS keyring, so it needs no cloud account.
   as a JSON object and uses the top-level string field `<field>`. Example:
   `aws-sm://eu-west-1/prod/db?profile=dev#password`.
 - An `aws-sm` name may contain `/`. A `gcp-sm` secret and a `keyring` account
-  may not.
+  may not. No segment may be `.` or `..`, and a reference may not hold control
+  or invisible characters.
 - `aws-sm` reads the current version (`AWSCURRENT`) of a string secret. Binary
   secrets are not supported.
 
@@ -103,7 +106,7 @@ Authentication for each provider is in the [user guide](docs/guide.md#providers-
 
 | Command | What it does |
 |---|---|
-| `secretref run [flags] -- <command> [args...]` | Resolve and start the command. Flags: `--env-file`, `--allow-missing`, `--timeout`, `--verbose`. |
+| `secretref run [flags] -- <command> [args...]` | Resolve and start the command. Flags: `--env-file`, `--all`, `--allow-missing`, `--timeout`, `--verbose`. |
 | `secretref check` | Resolve every annotated variable and print `ok` or the failure for each key. |
 | `secretref set keyring://<service>/<account>` | Store a value in the OS keyring. |
 | `secretref delete keyring://<service>/<account>` | Remove a value from the OS keyring. |
@@ -136,7 +139,7 @@ These are decided. Changing any of them needs a new
 - Refreshing values while the app runs, a daemon, or a cache. Restart the app
   to pick up a changed secret ([0002](docs/decisions/0002-resolve-at-process-start.md)).
 - Overriding a variable that is already set in the environment
-  ([0004](docs/decisions/0004-inject-all-variables-environment-wins.md)).
+  ([0016](docs/decisions/0016-inject-annotated-keys-by-default.md)).
 - A config file ([0003](docs/decisions/0003-annotations-are-comments.md)).
 - podman-compose and `docker-compose` v1. Compose mode supports
   `docker compose` v2 only ([0009](docs/decisions/0009-compose-names-only-override.md)).

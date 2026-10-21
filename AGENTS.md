@@ -15,7 +15,7 @@ Run `make` from the repository root. The Makefile is the source of truth for tar
 | `make test` | Unit tests with `-race`. |
 | `make test-acceptance` | Real binary through testscript against `provider/fake`. |
 | `make hooks` | Install the git hooks (lefthook). Run once per clone. |
-| `make fuzz` | Parser fuzz targets; `FUZZTIME` sets the duration. |
+| `make fuzz` | Parser fuzz targets; `FUZZTIME` sets the duration (CI: 30s per target). Seed corpora live in `internal/*/testdata/fuzz/`. |
 | `make test-integration` | `aws-sm` against a Moto container, and the keyring contract against a throwaway keyring (Linux, when gnome-keyring is installed) or the OS keyring; `CONTAINER` selects podman or docker. `gcp-sm` has no integration test; its unit tests use an httptest fake. |
 | `make build-all` | `CGO_ENABLED=0` build for linux, darwin, windows on amd64 and arm64. CI runs it. |
 | `make docs` | Regenerate `docs/reference/` from cobra and `docs/decisions/index.md` from the records. |
@@ -30,6 +30,8 @@ Never install tools globally and never edit tool versions anywhere else.
 - Exit codes: the child's code; 1 internal; 2 usage or no env file; 3 resolution failed; 126 command not executable; 127 command not found.
 - Defaults: env files `.env` then `.env.local`; concurrency 8; timeout 30s.
 - The existing process environment wins over file values and is never resolved.
+- `run` injects resolved keys and the plain keys built from them with `${...}`;
+  `--all` injects every file variable (ADR 0016). `check` is unaffected.
 - `set` and `delete` accept only `keyring://`.
 - Providers in v0.1: `aws-sm`, `gcp-sm`, `keyring`. Nothing else.
 - `CGO_ENABLED=0` must build for linux, darwin, windows on amd64 and arm64.

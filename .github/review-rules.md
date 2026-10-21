@@ -24,6 +24,7 @@ Used by human and automated reviewers. Rules come from [AGENTS.md](../AGENTS.md)
 - `fmt.Print*`, `log.*`, `io/ioutil`, `pkg/errors`, or testify.
 - A `workflow_dispatch` or dry-run path that can read secrets, request `id-token`, or use the `release` environment. Dispatch and dry-run paths get none of them and cannot publish.
 - A new Go package without `doc.go`.
+- A reference printed from `Ref.Raw` or `ref.Error.Raw` instead of `Ref.String()` or the error, or other text from a file or argument printed without escaping control characters ([ADR 0018](../docs/decisions/0018-printable-references-without-dot-segments.md)).
 - Commit trailers naming an AI tool, or `Claude-Session:`.
 
 ## Do not flag

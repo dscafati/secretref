@@ -12,7 +12,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-var validKey = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.]*$`)
+var validKey = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.-]*$`)
 
 func FuzzParse(f *testing.F) {
 	seeds, _ := filepath.Glob("testdata/*.env")
@@ -28,19 +28,22 @@ func FuzzParse(f *testing.F) {
 	f.Add([]byte("A=1\r\nB='x\r\ny'\r\n"))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		const name = "fuzz.env"
-		entries, err := Parse(name, bytes.NewReader(data))
+		entries, warnings, err := Parse(name, bytes.NewReader(data))
 		lines := bytes.Count(data, []byte("\n")) + 1
 
 		// Compare LF and CRLF forms of the same CR-free text.
 		lf := bytes.ReplaceAll(data, []byte("\r"), nil)
-		lfEntries, lfErr := Parse(name, bytes.NewReader(lf))
-		crlf, crlfErr := Parse(name, bytes.NewReader(bytes.ReplaceAll(lf, []byte("\n"), []byte("\r\n"))))
+		lfEntries, lfWarnings, lfErr := Parse(name, bytes.NewReader(lf))
+		crlf, crlfWarnings, crlfErr := Parse(name, bytes.NewReader(bytes.ReplaceAll(lf, []byte("\n"), []byte("\r\n"))))
 		if (lfErr == nil) != (crlfErr == nil) {
 			t.Fatalf("LF err %v, CRLF err %v", lfErr, crlfErr)
 		}
 		if lfErr == nil {
 			if diff := cmp.Diff(string(render(lfEntries)), string(render(crlf))); diff != "" {
 				t.Fatalf("CRLF differs from LF:\n%s", diff)
+			}
+			if diff := cmp.Diff(lfWarnings, crlfWarnings); diff != "" {
+				t.Fatalf("CRLF warnings differ from LF:\n%s", diff)
 			}
 		}
 		if err != nil {
@@ -55,6 +58,12 @@ func FuzzParse(f *testing.F) {
 				t.Fatalf("error file %q", pe.File)
 			}
 			return
+		}
+		for _, w := range warnings {
+			// SECURITY: a warning never carries text from the file.
+			if w.File != name || w.Line < 1 || w.Line > lines || w.Msg != "skipped unparseable line" {
+				t.Fatalf("bad warning %+v", w)
+			}
 		}
 		prev := 0
 		for _, e := range entries {

@@ -48,7 +48,7 @@ push.
 | Lint only | `make lint` |
 | Unit and golden tests | `make test` |
 | Acceptance tests with the real binary | `make test-acceptance` |
-| Fuzz the parsers | `make fuzz` |
+| Fuzz the parsers (CI runs 30 seconds per target) | `make fuzz` |
 | Integration tests | `make test-integration` |
 | Build every release target with `CGO_ENABLED=0` | `make build-all` |
 | Regenerate reference docs | `make docs` |

@@ -126,10 +126,35 @@ jobs:
           done
           exit "$status"
 
+  fuzz:
+    name: fuzz
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+      - name: Fuzz every parser target for 30 seconds
+        run: make fuzz FUZZTIME=30s
+      # A failing input is written under testdata/fuzz; print it so it can be
+      # added to the committed corpus. Fuzz inputs are random, not secrets.
+      - name: Show failing fuzz inputs
+        if: failure()
+        run: |
+          git status --porcelain --untracked-files=all -- 'internal/*/testdata/fuzz' |
+            awk '{print $2}' | while read -r f; do echo "== $f"; cat "$f"; done
+
   ci-gate:
     name: ci-gate
     if: always()
-    needs: [check, build-all, integration, commit-trailers]
+    needs: [check, build-all, integration, commit-trailers, fuzz]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
@@ -140,6 +165,7 @@ jobs:
           BUILD_ALL_RESULT: ${{ needs.build-all.result }}
           INTEGRATION_RESULT: ${{ needs.integration.result }}
           TRAILERS_RESULT: ${{ needs.commit-trailers.result }}
+          FUZZ_RESULT: ${{ needs.fuzz.result }}
         run: |
-          echo "check=$CHECK_RESULT build-all=$BUILD_ALL_RESULT integration=$INTEGRATION_RESULT commit-trailers=$TRAILERS_RESULT"
-          [ "$CHECK_RESULT" = "success" ] && [ "$BUILD_ALL_RESULT" = "success" ] && [ "$INTEGRATION_RESULT" = "success" ] && [ "$TRAILERS_RESULT" = "success" ]
+          echo "check=$CHECK_RESULT build-all=$BUILD_ALL_RESULT integration=$INTEGRATION_RESULT commit-trailers=$TRAILERS_RESULT fuzz=$FUZZ_RESULT"
+          [ "$CHECK_RESULT" = "success" ] && [ "$BUILD_ALL_RESULT" = "success" ] && [ "$INTEGRATION_RESULT" = "success" ] && [ "$TRAILERS_RESULT" = "success" ] && [ "$FUZZ_RESULT" = "success" ]

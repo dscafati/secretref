@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("A=\x22abc\x0a# secretref: keyring://a/b\x0aK=v\x0a")
