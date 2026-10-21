@@ -42,6 +42,9 @@ test-acceptance:
 	@if [ -d acceptance ]; then $(GO) test -race -count=1 -tags acceptance ./acceptance/...; \
 	else echo "test-acceptance: no acceptance directory yet, skipping"; fi
 
+# Minimization is off (-fuzzminimizetime 0): when -fuzztime expires while a worker
+# is minimizing an input, go test fails with "context deadline exceeded" instead
+# of passing, which made CI flaky. A crasher is still saved, just unminimized.
 # Runs every Fuzz* target in ./internal/envfile and ./internal/ref for
 # $(FUZZTIME) each. Fails if a package does not build or has no Fuzz target, so
 # a broken list never passes as "nothing to fuzz".
@@ -54,7 +57,7 @@ fuzz:
 	  if [ -z "$$targets" ]; then echo "fuzz: no Fuzz targets in internal/$$pkg"; exit 1; fi; \
 	  for t in $$targets; do \
 	    echo "fuzz $$pkg $$t"; \
-	    $(GO) test ./internal/$$pkg -run '^$$' -fuzz "^$$t$$" -fuzztime $(FUZZTIME) || exit 1; \
+	    $(GO) test ./internal/$$pkg -run '^$$' -fuzz "^$$t$$" -fuzztime $(FUZZTIME) -fuzzminimizetime 0 || exit 1; \
 	  done; \
 	done
 
