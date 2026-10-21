@@ -1,171 +1,68 @@
 # secretref
 
-secretref starts a command with real secrets in its environment. You mark each
-secret in your `.env` file with a comment that says where the value lives.
-Your app code does not change.
+Keep secrets out of your `.env` files. You add a comment that says where each
+secret lives, and `secretref run` starts your command with the real values.
 
-> Early preview. Expect breaking changes before 1.0. See [Stability](#stability).
+> Early preview. Expect breaking changes before 1.0.
 
-```dotenv
-# secretref: aws-sm://eu-west-1/prod/stripe#key
-STRIPE_KEY=
+## Nothing to roll out
 
-# secretref: keyring://myapp/DB_PASSWORD
-DB_PASSWORD=localdev
+You do not change your team's workflow, your apps, or your repo. One developer
+can start alone. Teammates who do not use secretref see a normal `.env` file,
+because dotenv loaders read the annotation as a comment. Use it internally, on one
+project at a time.
 
-LOG_LEVEL=info
+Before, `.env.local` holds a pasted secret that also gets shared over chat:
+
+```diff
+- STRIPE_KEY=sk_live_51Hxxxxxxxxxxxxxxxxxxxx
+```
+
+After, the file holds only a reference and a placeholder:
+
+```diff
++ # secretref: aws-sm://eu-west-1/prod/stripe#key
++ STRIPE_KEY=placeholder
 ```
 
 ```sh
-secretref run -- node server.js
+secretref run -- npm start
 ```
-
-- secretref resolves annotated variables with your own credentials and gives
-  your command the real values, plus any value built from them with `${...}`.
-- Other variables are left to your app's own dotenv loader, so mode-specific
-  files such as `.env.development` keep working. `run --all` passes every
-  variable instead.
-- Variables already set in your environment win and are not resolved, so CI
-  and production need no change.
-- Without secretref the file is still a normal `.env` file. Dotenv loaders read
-  the annotation as a comment.
-- secretref never writes a resolved value to disk, stdout, stderr, or logs.
-  There is no daemon and no cache.
-
-## Install
-
-| Method | Command |
-|---|---|
-| Homebrew | `brew install --cask dscafati/tap/secretref` |
-| Scoop (Windows) | `scoop bucket add dscafati https://github.com/dscafati/scoop-bucket` then `scoop install dscafati/secretref` |
-| winget (Windows) | `winget install dscafati.secretref` |
-| npm | `npm install -g secretref` |
-| Go 1.26 or later | `go install github.com/dscafati/secretref/cmd/secretref@latest` |
-| deb, rpm, archives | Download from [GitHub Releases](https://github.com/dscafati/secretref/releases) |
-
-Release binaries are built for Linux, macOS, and Windows on amd64 and arm64.
-They have no runtime dependencies.
-
-macOS binaries are not notarized. The Homebrew cask removes the quarantine
-attribute when it installs. If you download an archive with a browser, run
-`xattr -d com.apple.quarantine secretref` before the first start.
-
-To check that a download is genuine, see [docs/verify.md](docs/verify.md).
-
-## Quick start
-
-This example uses the OS keyring, so it needs no cloud account.
-
-1. Store a value. secretref prompts for it without echo:
-
-   ```sh
-   secretref set keyring://myapp/DB_PASSWORD
-   ```
-
-2. Annotate the variable in `.env`. The annotation applies to the line directly
-   below it:
-
-   ```dotenv
-   # secretref: keyring://myapp/DB_PASSWORD
-   DB_PASSWORD=localdev
-   ```
-
-3. Check that every reference resolves. `check` prints keys and references,
-   never values:
-
-   ```sh
-   secretref check
-   ```
-
-4. Start your app:
-
-   ```sh
-   secretref run -- npm start
-   ```
 
 ## Providers
 
-| Scheme | Reference | Options | Credentials |
-|---|---|---|---|
-| `aws-sm` | `aws-sm://<region>/<name>` | `?profile=<profile>` | AWS SDK default chain |
-| `gcp-sm` | `gcp-sm://<project>/<secret>` | `?version=<N>` or `?version=latest` (default `latest`) | Google Application Default Credentials |
-| `keyring` | `keyring://<service>/<account>` | none | The OS keyring of the current user |
-
-- Every scheme accepts `#<field>` at the end. secretref then parses the secret
-  as a JSON object and uses the top-level string field `<field>`. Example:
-  `aws-sm://eu-west-1/prod/db?profile=dev#password`.
-- An `aws-sm` name may contain `/`. A `gcp-sm` secret and a `keyring` account
-  may not. No segment may be `.` or `..`, and a reference may not hold control
-  or invisible characters.
-- `aws-sm` reads the current version (`AWSCURRENT`) of a string secret. Binary
-  secrets are not supported.
-
-Authentication for each provider is in the [user guide](docs/guide.md#providers-and-authentication).
-
-## Commands
-
-| Command | What it does |
+| Store | Example reference |
 |---|---|
-| `secretref run [flags] -- <command> [args...]` | Resolve and start the command. Flags: `--env-file`, `--all`, `--allow-missing`, `--timeout`, `--verbose`. |
-| `secretref check` | Resolve every annotated variable and print `ok` or the failure for each key. |
-| `secretref set keyring://<service>/<account>` | Store a value in the OS keyring. |
-| `secretref delete keyring://<service>/<account>` | Remove a value from the OS keyring. |
-| `secretref version` or `secretref --version` | Print the version. |
-| `secretref completion <shell>` | Print a shell completion script. |
+| AWS Secrets Manager | `aws-sm://eu-west-1/prod/stripe#key` |
+| GCP Secret Manager | `gcp-sm://my-project/stripe` |
+| OS keyring: macOS Keychain, Windows Credential Manager, Linux Secret Service | `keyring://myapp/DB_PASSWORD` |
 
-`set` and `delete` accept only `keyring://` references. Every flag is in
-[docs/reference/](docs/reference/secretref.md).
+## Install
 
-## Exit codes
+```sh
+brew install --cask dscafati/tap/secretref
+scoop bucket add dscafati https://github.com/dscafati/scoop-bucket
+scoop install dscafati/secretref
+npm install -g secretref
+go install github.com/dscafati/secretref/cmd/secretref@latest
+```
 
-| Code | Meaning |
-|---|---|
-| child's code | The command ran. secretref exits with its code. |
-| 1 | Internal error. |
-| 2 | Usage error, an invalid env file or annotation, or no env file found. |
-| 3 | A reference failed to resolve. `delete` also exits 3 when the item does not exist. |
-| 126 | The command exists but cannot be run: not executable, a directory, or a script without a shebang line. |
-| 127 | The command was not found. |
+## How it works
 
-## Not in scope
+- `run` resolves the annotated keys with your own credentials when the command
+  starts. It adds those keys, and any value built from them such as
+  `DATABASE_URL=postgres://app:${DB_PASSWORD}@db/app`, to the command's
+  environment. Other variables are left to your app's own dotenv loader.
+- A variable already set in your environment wins, so CI and production need
+  no change.
+- Resolved values are never written to disk, stdout, stderr, or logs.
+- There is no daemon, no cache, and no telemetry.
 
-These are decided. Changing any of them needs a new
-[decision record](docs/decisions/index.md).
+## Learn more
 
-- Writing to cloud secret stores. `set` and `delete` work only on the local
-  keyring ([0007](docs/decisions/0007-writes-only-to-local-keyring.md)).
-- Writing resolved values to files or templates
-  ([0002](docs/decisions/0002-resolve-at-process-start.md)).
-- Refreshing values while the app runs, a daemon, or a cache. Restart the app
-  to pick up a changed secret ([0002](docs/decisions/0002-resolve-at-process-start.md)).
-- Overriding a variable that is already set in the environment
-  ([0016](docs/decisions/0016-inject-annotated-keys-by-default.md)).
-- A config file ([0003](docs/decisions/0003-annotations-are-comments.md)).
-- podman-compose and `docker-compose` v1. Compose mode supports
-  `docker compose` v2 only ([0009](docs/decisions/0009-compose-names-only-override.md)).
-- Providers other than `aws-sm`, `gcp-sm`, and `keyring` in v0.1. HashiCorp
-  Vault, Azure Key Vault, and others are not supported.
-- Telemetry, usage data, crash reports, and update checks
-  ([0011](docs/decisions/0011-no-telemetry.md)).
-
-## Stability
-
-Before 1.0, a minor release may contain breaking changes. Three things change
-only with a new decision record and a callout in the release notes:
-
-- the annotation syntax (`# secretref: <ref>`),
-- the reference grammar,
-- the exit codes.
-
-## Documentation
-
-- [User guide](docs/guide.md): annotations, file loading, expansion,
-  authentication, Docker Compose, Windows, and troubleshooting.
-- [Command reference](docs/reference/secretref.md), generated from the CLI.
-- [Verifying a release](docs/verify.md).
-- [Security policy](SECURITY.md) and threat model.
-- [Contributing](CONTRIBUTING.md) and [decision records](docs/decisions/index.md).
-
-## License
-
-Apache-2.0. See [LICENSE](LICENSE).
+- [User guide](docs/guide.md)
+- [Command reference](docs/reference/secretref.md)
+- [Security policy](SECURITY.md)
+- [Contributing](CONTRIBUTING.md)
+- [Decision records](docs/decisions/index.md)
+- [License](LICENSE): Apache-2.0
