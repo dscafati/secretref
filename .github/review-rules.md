@@ -11,7 +11,7 @@ Used by human and automated reviewers. Rules come from [AGENTS.md](../AGENTS.md)
 - `set` or `delete` accepting a scheme other than `keyring://`.
 - A new provider, flag, or env var not covered by an ADR.
 - Anything that needs CGO, or breaks a linux/darwin/windows x amd64/arm64 build.
-- Package-level mutable state; wiring outside `cmd/secretref/main.go`.
+- Package-level mutable state, or a package-level variable that [ADR 0015](../docs/decisions/0015-manual-dependency-injection-immutable-globals.md) does not allow; wiring outside `cmd/secretref/main.go`.
 - A bug fix without a test that fails without the fix.
 - A decision reversed without a superseding ADR, or an edited accepted ADR.
 - Hand edits under `docs/reference/`.

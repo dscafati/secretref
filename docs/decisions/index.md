@@ -16,7 +16,7 @@ A record has one of these statuses:
 | 0003 | [Annotations are comments; files stay valid dotenv](0003-annotations-are-comments.md) | Accepted |
 | 0004 | [Inject all variables; the existing environment wins](0004-inject-all-variables-environment-wins.md) | Accepted |
 | 0005 | [Go with pure-Go dependencies, no CGO](0005-pure-go-no-cgo.md) | Accepted |
-| 0006 | [Manual dependency injection](0006-manual-dependency-injection.md) | Accepted |
+| 0006 | [Manual dependency injection](0006-manual-dependency-injection.md) | Superseded by 0015 |
 | 0007 | [Writes only to the local keyring](0007-writes-only-to-local-keyring.md) | Accepted |
 | 0008 | [GCP over REST, not gRPC](0008-gcp-over-rest.md) | Accepted |
 | 0009 | [Docker Compose support through a names-only override](0009-compose-names-only-override.md) | Accepted |
@@ -25,3 +25,4 @@ A record has one of these statuses:
 | 0012 | [No AI co-author trailers](0012-no-ai-co-author-trailers.md) | Accepted |
 | 0013 | [Sequential decision numbers](0013-sequential-decision-numbers.md) | Accepted |
 | 0014 | [Generated decision index](0014-generated-decision-index.md) | Accepted |
+| 0015 | [Manual dependency injection; immutable package-level values allowed](0015-manual-dependency-injection-immutable-globals.md) | Accepted |
