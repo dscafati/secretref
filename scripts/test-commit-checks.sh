@@ -66,6 +66,23 @@ for t in sh cat dirname sed grep head awk; do
   p=$(command -v "$t") || { echo "FAIL: $t not found" >&2; exit 1; }
   ln -s "$p" "$nojq/$t"
 done
+# Git Bash on Windows copies instead of linking, and the copies cannot load
+# their DLLs. There, use the tools' own directories instead, as long as none of
+# them also holds jq.
+if ! PATH="$nojq" sh -c 'cat </dev/null' >/dev/null 2>&1; then
+  nojq=
+  for t in sh cat dirname sed grep head awk; do
+    d=$(dirname -- "$(command -v "$t")")
+    case ":$nojq:" in
+      *":$d:"*) ;;
+      *) nojq="${nojq:+$nojq:}$d" ;;
+    esac
+  done
+  if PATH="$nojq" sh -c 'command -v jq' >/dev/null 2>&1; then
+    echo "FAIL: jq is in a directory with the guard's tools ($nojq); cannot test the awk path" >&2
+    exit 1
+  fi
+fi
 if command -v jq >/dev/null 2>&1; then
   have_jq=1
 else
