@@ -35,7 +35,7 @@ test:
 # Acceptance tests drive the real binary through testscript. They live in
 # ./acceptance behind the `acceptance` build tag.
 test-acceptance:
-	@if [ -d acceptance ]; then $(GO) test -race -tags acceptance ./acceptance/...; \
+	@if [ -d acceptance ]; then $(GO) test -race -count=1 -tags acceptance ./acceptance/...; \
 	else echo "test-acceptance: no acceptance directory yet, skipping"; fi
 
 # Runs every Fuzz* target in ./internal/envfile and ./internal/ref.

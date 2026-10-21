@@ -50,15 +50,21 @@ push.
 | Integration tests | `make test-integration` |
 | Build every release target with `CGO_ENABLED=0` | `make build-all` |
 | Regenerate reference docs | `make docs` |
-| Build release binaries locally | `make snapshot` |
+| Build release binaries locally, without signing or SBOMs | `make snapshot` |
 
-Integration tests start a Secrets Manager emulator container for `aws-sm` and
-run the provider contract tests against the real OS keyring. `CONTAINER`
-selects the container runtime, podman or docker:
+Integration tests start a [Moto](https://github.com/getmoto/moto) container
+as the Secrets Manager emulator for `aws-sm`, and run the keyring contract
+tests. They need podman or docker, `bash`, and `curl`. `CONTAINER` selects the
+container runtime:
 
 ```sh
 make test-integration CONTAINER=docker
 ```
+
+On Linux, install `gnome-keyring` and `dbus` (for `dbus-run-session`) and the
+keyring tests run against a throwaway keyring on a private session bus.
+Without them they use your session's keyring, and they clean up after
+themselves. On macOS and Windows they use the OS keyring.
 
 `gcp-sm` has no integration test. Its unit tests run against a fake HTTP
 server. Tests never use real cloud accounts. A maintainer runs those by hand.

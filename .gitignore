@@ -4,3 +4,4 @@ node_modules/
 /dist-docs/
 /secretref
 *.exe
+/.claude/worktrees/

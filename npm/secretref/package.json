@@ -1,7 +1,7 @@
 {
   "name": "secretref",
   "version": "0.0.0",
-  "description": "Resolve secrets from vaults using reference comments in your .env files. No code changes.",
+  "description": "Resolve secrets from AWS Secrets Manager, GCP Secret Manager, and the OS keyring using reference comments in your .env files.",
   "license": "Apache-2.0",
   "author": "Diego Scafati",
   "repository": {
