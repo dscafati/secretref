@@ -27,6 +27,7 @@ func globalValueFlags() map[string]bool {
 		"-f": true, "--file": true,
 		"-p": true, "--project-name": true,
 		"--project-directory": true,
+		"--workdir":           true, // deprecated alias of --project-directory
 		"--profile":           true,
 		"--env-file":          true,
 		"--ansi":              true,
@@ -64,7 +65,7 @@ func parseArgs(argv []string) invocation {
 		case "-f", "--file":
 			inv.files = append(inv.files, value)
 			inv.lastFileEnd = i + 1
-		case "--project-directory":
+		case "--project-directory", "--workdir":
 			inv.projectDir = value
 		}
 	}
@@ -72,8 +73,8 @@ func parseArgs(argv []string) invocation {
 }
 
 // composeFiles returns the compose files compose will load, as absolute paths:
-// the -f flags, else COMPOSE_FILE, else the first default name found plus its
-// override file.
+// the -f flags, else COMPOSE_FILE, else the default files found from
+// --project-directory or cwd upwards.
 func composeFiles(inv invocation, environ []string, cwd string) ([]string, error) {
 	var named []string
 	switch v, ok := envValue(environ, composeFileVar); {
@@ -102,37 +103,53 @@ func composeFiles(inv invocation, environ []string, cwd string) ([]string, error
 	return files, nil
 }
 
-// defaultFiles returns the first existing default compose file in dir and its
-// override file, if any.
+// defaultFiles finds the compose files the way compose-go's
+// cli.WithDefaultConfigPath does: starting at dir, it walks up to the root and
+// stops at the first directory holding one of the default names. It returns
+// the first default name found there plus the first override name found
+// there, which need not share its stem. It returns nil when no directory has
+// one.
 func defaultFiles(dir string) []string {
-	for _, name := range []string{"compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"} {
-		base := filepath.Join(dir, name)
-		if !isFile(base) {
-			continue
-		}
-		files := []string{base}
-		stem, ext := strings.TrimSuffix(name, filepath.Ext(name)), filepath.Ext(name)
-		for _, e := range []string{ext, otherExt(ext)} {
-			if o := filepath.Join(dir, stem+".override"+e); isFile(o) {
+	for {
+		if base := firstExisting(dir, defaultNames()); base != "" {
+			files := []string{base}
+			if o := firstExisting(dir, overrideNames()); o != "" {
 				files = append(files, o)
-				break
 			}
+			return files
 		}
-		return files
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return nil
+		}
+		dir = parent
 	}
-	return nil
 }
 
-func otherExt(ext string) string {
-	if ext == ".yaml" {
-		return ".yml"
-	}
-	return ".yaml"
+// defaultNames are compose-go's cli.DefaultFileNames, in its order.
+func defaultNames() []string {
+	return []string{"compose.yaml", "compose.yml", "docker-compose.yml", "docker-compose.yaml"}
 }
 
-func isFile(p string) bool {
-	info, err := os.Stat(p)
-	return err == nil && info.Mode().IsRegular()
+// overrideNames are compose-go's cli.DefaultOverrideFileNames, in its order.
+func overrideNames() []string {
+	return []string{"compose.override.yml", "compose.override.yaml", "docker-compose.override.yml", "docker-compose.override.yaml"}
+}
+
+// firstExisting returns the path of the first name that exists in dir, or "".
+// Like compose-go, it accepts anything os.Stat accepts.
+func firstExisting(dir string, names []string) string {
+	for _, name := range names {
+		if p := filepath.Join(dir, name); exists(p) {
+			return p
+		}
+	}
+	return ""
+}
+
+func exists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }
 
 // projectDir is the directory compose resolves relative paths against:

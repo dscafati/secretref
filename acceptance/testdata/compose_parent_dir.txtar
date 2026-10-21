@@ -1,0 +1,18 @@
+# Without -f or COMPOSE_FILE, compose finds compose.yaml in a parent
+# directory; secretref must find the same file and write the override.
+cd app/src
+exec secretref run -- docker compose -show-compose DB_PASSWORD
+stdout 'DB_PASSWORD: \$\{DB_PASSWORD\}'
+! stderr 'no service uses'
+grep '^DB_PASSWORD=SR_CANARY_7f3a9c$' child-env.txt
+no-canary
+no-override
+
+-- compose.yaml --
+services:
+  web:
+    image: alpine
+    env_file: app/src/.env
+-- app/src/.env --
+# secretref: keyring://app/db_password
+DB_PASSWORD=localdev

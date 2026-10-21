@@ -249,7 +249,8 @@ func TestComposePathSeparator(t *testing.T) {
 }
 
 func TestDefaultFileOrder(t *testing.T) {
-	// compose.yaml wins over docker-compose.yml; only its own override joins.
+	// compose.yaml wins over docker-compose.yml. Like compose-go, any
+	// override name in the same directory joins, whatever its stem.
 	dir := project(t, map[string]string{
 		"compose.yaml":                simpleCompose,
 		"docker-compose.yml":          "services: {}\n",
@@ -258,7 +259,8 @@ func TestDefaultFileOrder(t *testing.T) {
 	keys := map[string][]string{filepath.Join(dir, ".env"): {"A"}}
 	plan, path := prepare(t, []string{"docker", "compose", "up"}, nil, keys, dir)
 	got, _ := envGet(plan.Env, "COMPOSE_FILE")
-	want := filepath.Join(dir, "compose.yaml") + string(os.PathListSeparator) + path
+	want := filepath.Join(dir, "compose.yaml") + string(os.PathListSeparator) +
+		filepath.Join(dir, "docker-compose.override.yml") + string(os.PathListSeparator) + path
 	if got != want {
 		t.Errorf("COMPOSE_FILE = %q, want %q", got, want)
 	}
