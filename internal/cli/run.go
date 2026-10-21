@@ -100,7 +100,9 @@ func runRun(ctx context.Context, d Deps, o runOptions, dash int, argv []string) 
 
 	env := res.Environ(d.Environ())
 	if compose.Detect(argv) {
-		return runCompose(ctx, d, argv, env, keysByFile(entries, res), cwd)
+		return runCompose(ctx, d, compose.Input{
+			Argv: argv, Environ: env, Parent: d.Environ(), Keys: keysByFile(res), Cwd: cwd,
+		})
 	}
 	if runtime.GOOS == "windows" {
 		code, err := d.Spawn(ctx, argv, env)
@@ -111,12 +113,12 @@ func runRun(ctx context.Context, d Deps, o runOptions, dash int, argv []string) 
 
 // runCompose spawns docker compose with the override that passes the
 // injected keys to the services, and removes the override afterwards.
-func runCompose(ctx context.Context, d Deps, argv, env []string, keys map[string][]string, cwd string) (err error) {
+func runCompose(ctx context.Context, d Deps, in compose.Input) (err error) {
 	// Signals are held from before the override exists until it is removed,
 	// so an interrupt cannot leave it behind.
 	received, stop := procexec.Hold()
 	defer stop()
-	plan, err := compose.Prepare(argv, env, keys, cwd)
+	plan, err := compose.Prepare(ctx, in)
 	if err != nil {
 		return internalError(err)
 	}
@@ -125,15 +127,18 @@ func runCompose(ctx context.Context, d Deps, argv, env []string, keys map[string
 			err = internalError(fmt.Errorf("remove compose override: %w", cerr))
 		}
 	}()
-	if plan.Override == "" && len(keys) > 0 {
+	for _, w := range plan.Warnings {
+		_, _ = fmt.Fprintf(d.Stderr, "secretref: compose: warning: %s\n", w)
+	}
+	if !plan.Matched && len(in.Keys) > 0 {
 		_, _ = fmt.Fprintf(d.Stderr, "secretref: compose: no service uses %s; containers will see file values\n",
-			fileList(keys, cwd))
+			fileList(in.Keys, in.Cwd))
 	}
 	if s, ok := received(); ok {
 		return exitWith(procexec.SignalExitCode(s))
 	}
 	code, serr := d.Spawn(ctx, plan.Args, plan.Env)
-	return startResult(argv, code, serr)
+	return startResult(in.Argv, code, serr)
 }
 
 // fileList names the files in keys, relative to cwd where possible, sorted.
@@ -202,22 +207,15 @@ func loadEntries(cwd string, flagged []string) ([]envfile.Entry, error) {
 	return entries, nil
 }
 
-// keysByFile maps each loaded file to the keys it defines that the child
-// receives from secretref, so compose services listing that file get them.
-func keysByFile(entries []envfile.Entry, res resolve.Result) map[string][]string {
-	injected := map[string]bool{}
-	for _, v := range res.Vars {
-		if !v.FromEnv {
-			injected[v.Key] = true
-		}
-	}
+// keysByFile maps each loaded file to the keys resolved from an annotation
+// whose final value came from that file. Compose passes only these through
+// the override, and only to services that list that file; it reads every
+// other key from env_file itself.
+func keysByFile(res resolve.Result) map[string][]string {
 	out := map[string][]string{}
-	seen := map[string]bool{}
-	for _, e := range entries {
-		id := e.File + "\x00" + e.Key
-		if injected[e.Key] && !seen[id] {
-			seen[id] = true
-			out[e.File] = append(out[e.File], e.Key)
+	for _, v := range res.Vars {
+		if v.Ref != nil && !v.FromEnv && !v.FellBack {
+			out[v.File] = append(out[v.File], v.Key)
 		}
 	}
 	return out

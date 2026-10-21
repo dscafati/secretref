@@ -1,0 +1,20 @@
+# COMPOSE_FILE and COMPOSE_PATH_SEPARATOR set in an env file, here built from
+# a secret, do not steer secretref, and nothing built from them reaches
+# stderr. secretref finds compose.yaml and pins both variables for compose.
+exec secretref run -- docker compose -show-compose DB_PASSWORD
+stdout 'DB_PASSWORD: \$\{DB_PASSWORD\}'
+stderr 'COMPOSE_FILE'
+grep '^DB_PASSWORD=SR_CANARY_7f3a9c$' child-env.txt
+no-canary
+no-override
+
+-- .env --
+# secretref: keyring://app/db_password
+DB_PASSWORD=localdev
+COMPOSE_FILE=x${DB_PASSWORD}
+COMPOSE_PATH_SEPARATOR=,
+-- compose.yaml --
+services:
+  web:
+    image: alpine
+    env_file: .env

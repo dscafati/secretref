@@ -1,6 +1,8 @@
 package compose_test
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -72,12 +74,20 @@ func useTempDir(t *testing.T) string {
 	return tmp
 }
 
-// prepare runs Prepare and returns the plan and the override path ("" if
-// none was written).
+// prepare runs Prepare with environ as both the parent and the child
+// environment, and returns the plan and the override path ("" if none was
+// written).
 func prepare(t *testing.T, argv, environ []string, keys map[string][]string, cwd string) (compose.Plan, string) {
 	t.Helper()
+	return prepareInput(t, compose.Input{Argv: argv, Environ: environ, Parent: environ, Keys: keys, Cwd: cwd})
+}
+
+// prepareInput runs Prepare on in and returns the plan and the override path
+// ("" if none was written).
+func prepareInput(t *testing.T, in compose.Input) (compose.Plan, string) {
+	t.Helper()
 	tmp := useTempDir(t)
-	plan, err := compose.Prepare(argv, environ, keys, cwd)
+	plan, err := compose.Prepare(context.Background(), in)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
@@ -327,7 +337,10 @@ func TestNoMatchingServiceLeavesPlanUnchanged(t *testing.T) {
 	dir := project(t, map[string]string{"compose.yaml": simpleCompose})
 	argv := []string{"docker", "compose", "up"}
 	environ := []string{"A=" + canary}
-	plan, err := compose.Prepare(argv, environ, map[string][]string{filepath.Join(dir, "other.env"): {"A"}}, dir)
+	plan, err := compose.Prepare(context.Background(), compose.Input{
+		Argv: argv, Environ: environ, Parent: environ,
+		Keys: map[string][]string{filepath.Join(dir, "other.env"): {"A"}}, Cwd: dir,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -362,9 +375,163 @@ func TestNoComposeFile(t *testing.T) {
 
 func TestMissingFlagFileIsAnError(t *testing.T) {
 	dir := t.TempDir()
-	_, err := compose.Prepare([]string{"docker", "compose", "-f", "nope.yaml", "up"}, nil,
-		map[string][]string{filepath.Join(dir, ".env"): {"A"}}, dir)
+	_, err := compose.Prepare(context.Background(), compose.Input{
+		Argv: []string{"docker", "compose", "-f", "nope.yaml", "up"},
+		Keys: map[string][]string{filepath.Join(dir, ".env"): {"A"}}, Cwd: dir,
+	})
 	if err == nil {
 		t.Fatal("want error")
+	}
+}
+
+func TestPrepareStopsOnCanceledContext(t *testing.T) {
+	useTempDir(t)
+	dir := project(t, map[string]string{"compose.yaml": simpleCompose})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := compose.Prepare(ctx, compose.Input{
+		Argv: []string{"docker", "compose", "up"},
+		Keys: map[string][]string{filepath.Join(dir, ".env"): {"A"}}, Cwd: dir,
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Prepare error = %v, want context.Canceled", err)
+	}
+}
+
+func TestComposeSettingsComeFromParentOnly(t *testing.T) {
+	// An env file can set COMPOSE_FILE and COMPOSE_PATH_SEPARATOR, even to
+	// text built from a secret. secretref decides from the parent
+	// environment only, and pins both for compose when it sets COMPOSE_FILE.
+	dir := project(t, map[string]string{"compose.yaml": simpleCompose})
+	sep := string(os.PathListSeparator)
+	keys := map[string][]string{filepath.Join(dir, ".env"): {"A"}}
+	plan, path := prepareInput(t, compose.Input{
+		Argv:    []string{"docker", "compose", "up"},
+		Environ: []string{"PATH=/bin", "COMPOSE_FILE=x" + canary, "COMPOSE_PATH_SEPARATOR=,"},
+		Parent:  []string{"PATH=/bin"},
+		Keys:    keys,
+		Cwd:     dir,
+	})
+	if path == "" {
+		t.Fatal("no override written")
+	}
+	got, _ := envGet(plan.Env, "COMPOSE_FILE")
+	if want := filepath.Join(dir, "compose.yaml") + sep + path; got != want {
+		t.Errorf("COMPOSE_FILE = %q, want %q", got, want)
+	}
+	if got, _ := envGet(plan.Env, "COMPOSE_PATH_SEPARATOR"); got != sep {
+		t.Errorf("COMPOSE_PATH_SEPARATOR = %q, want %q", got, sep)
+	}
+	if !slices.ContainsFunc(plan.Warnings, func(w string) bool { return strings.Contains(w, "COMPOSE_FILE") }) {
+		t.Errorf("Warnings = %q, want one naming COMPOSE_FILE", plan.Warnings)
+	}
+	for _, w := range plan.Warnings {
+		if strings.Contains(w, canary) {
+			t.Errorf("warning leaks an env-file value: %q", w)
+		}
+	}
+}
+
+func TestComposeFileErrorsNameTheVariable(t *testing.T) {
+	// Paths from COMPOSE_FILE never appear in an error; the error names the
+	// variable instead.
+	dir := project(t, map[string]string{canary + "-bad.yaml": "services: [\n"})
+	keys := map[string][]string{filepath.Join(dir, ".env"): {"A"}}
+	for name, file := range map[string]string{"missing": canary + ".yaml", "invalid": canary + "-bad.yaml"} {
+		t.Run(name, func(t *testing.T) {
+			useTempDir(t)
+			env := []string{"COMPOSE_FILE=" + file}
+			_, err := compose.Prepare(context.Background(), compose.Input{
+				Argv: []string{"docker", "compose", "up"}, Environ: env, Parent: env, Keys: keys, Cwd: dir,
+			})
+			if err == nil {
+				t.Fatal("want error")
+			}
+			if msg := err.Error(); strings.Contains(msg, canary) || !strings.Contains(msg, "COMPOSE_FILE") {
+				t.Errorf("error = %q, want it to name COMPOSE_FILE and not the path", msg)
+			}
+		})
+	}
+}
+
+func readServices(t *testing.T, path string) map[string][]string {
+	t.Helper()
+	_, o := readOverride(t, path)
+	got := map[string][]string{}
+	for name, svc := range o.Services {
+		for k := range svc.Environment {
+			got[name] = append(got[name], k)
+		}
+		slices.Sort(got[name])
+	}
+	return got
+}
+
+func TestServiceEnvironmentKeepsItsKeys(t *testing.T) {
+	// A key the service sets in environment:, in any compose file and in
+	// either form, stays as the service sets it.
+	files := map[string]string{}
+	for _, name := range []string{"environment_base.yaml", "environment_extra.yaml"} {
+		data, err := os.ReadFile(filepath.Join("testdata", name)) //nolint:gosec // G304: a fixed testdata file.
+		if err != nil {
+			t.Fatal(err)
+		}
+		files[name] = string(data)
+	}
+	dir := project(t, files)
+	keys := map[string][]string{filepath.Join(dir, ".env"): {"A", "B", "C", "D", "E"}}
+	argv := []string{"docker", "compose", "-f", "environment_base.yaml", "-f", "environment_extra.yaml", "up"}
+	_, path := prepare(t, argv, nil, keys, dir)
+	want := map[string][]string{
+		"map_form":       {"C", "E"},
+		"list_form":      {"B", "D", "E"},
+		"sets_all":       {"E"},
+		"no_environment": {"A", "B", "C", "D", "E"},
+	}
+	if diff := cmp.Diff(want, readServices(t, path)); diff != "" {
+		t.Errorf("override services (-want +got):\n%s", diff)
+	}
+
+	// When the services set every key themselves, nothing is written.
+	dir = project(t, map[string]string{
+		"compose.yaml": "services:\n  web:\n    env_file: .env\n    environment: {A: x}\n",
+	})
+	keys = map[string][]string{filepath.Join(dir, ".env"): {"A"}}
+	plan, path := prepare(t, []string{"docker", "compose", "up"}, []string{"A=1"}, keys, dir)
+	if path != "" || plan.Override != "" {
+		t.Errorf("override written: %s", path)
+	}
+	if diff := cmp.Diff([]string{"A=1"}, plan.Env); diff != "" {
+		t.Errorf("env changed (-want +got):\n%s", diff)
+	}
+}
+
+func TestKeysComposeCannotSubstituteAreSkipped(t *testing.T) {
+	// Compose substitutes only ${NAME} with NAME of letters, digits, and _,
+	// not starting with a digit. Other keys get one warning each.
+	dir := project(t, map[string]string{
+		"compose.yaml": "services:\n  web:\n    env_file: .env\n  worker:\n    env_file: .env\n",
+	})
+	keys := map[string][]string{filepath.Join(dir, ".env"): {"a.b", "OK", "x-y", "_ok2", "9x"}}
+	plan, path := prepare(t, []string{"docker", "compose", "up"}, nil, keys, dir)
+	want := map[string][]string{"web": {"OK", "_ok2"}, "worker": {"OK", "_ok2"}}
+	if diff := cmp.Diff(want, readServices(t, path)); diff != "" {
+		t.Errorf("override services (-want +got):\n%s", diff)
+	}
+	var named []string
+	for _, w := range plan.Warnings {
+		named = append(named, strings.Fields(w)[0])
+	}
+	if diff := cmp.Diff([]string{"9x", "a.b", "x-y"}, named); diff != "" {
+		t.Errorf("warned keys (-want +got):\n%s\nWarnings = %q", diff, plan.Warnings)
+	}
+
+	keys = map[string][]string{filepath.Join(dir, ".env"): {"a.b"}}
+	plan, path = prepare(t, []string{"docker", "compose", "up"}, nil, keys, dir)
+	if path != "" {
+		t.Errorf("override written: %s", path)
+	}
+	if !plan.Matched || len(plan.Warnings) != 1 {
+		t.Errorf("Matched = %v, Warnings = %q", plan.Matched, plan.Warnings)
 	}
 }

@@ -1,6 +1,7 @@
 package compose
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -12,7 +13,10 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-const composeFileVar = "COMPOSE_FILE"
+const (
+	composeFileVar   = "COMPOSE_FILE"
+	pathSeparatorVar = "COMPOSE_PATH_SEPARATOR"
+)
 
 // Detect reports whether argv is a docker compose invocation: argv[0] has base
 // name docker (or docker.exe) and compose is its first argument after docker's
@@ -68,32 +72,67 @@ type Plan struct {
 	Args    []string
 	Env     []string
 	Cleanup func() error
-	// Override is the path of the override file, or "" when no service uses
-	// a loaded env file and nothing was written.
+	// Override is the path of the override file, or "" when no service needs
+	// a key and nothing was written.
 	Override string
+	// Matched reports whether any service lists a file in Input.Keys in
+	// env_file.
+	Matched bool
+	// Warnings are messages for stderr. They hold variable names, never
+	// values.
+	Warnings []string
 }
 
-// Prepare builds the Plan for argv. keysByFile maps each env file secretref
-// loaded to the keys it injects; environ is the child environment. Services
-// whose env_file names one of those files get an override that sets each key
-// to ${KEY}, so compose reads the value from its own environment.
+// Input is what Prepare reads.
+type Input struct {
+	// Argv is the command line, starting with docker.
+	Argv []string
+	// Environ is the environment the child gets.
+	Environ []string
+	// Parent is the environment secretref itself started with. COMPOSE_FILE
+	// and COMPOSE_PATH_SEPARATOR are read from here only, never from Environ,
+	// which holds env-file values that can be built from a secret.
+	Parent []string
+	// Keys maps each env file secretref loaded to the keys it passes to the
+	// services that list that file in env_file.
+	Keys map[string][]string
+	// Cwd is the working directory.
+	Cwd string
+}
+
+// Prepare builds the Plan for in.Argv. Services whose env_file names a file
+// in in.Keys get an override that sets each of its keys to ${KEY}, so compose
+// reads the value from its own environment.
 //
-// When no service matches, the Plan carries argv and environ unchanged and no
-// file is written.
-func Prepare(argv, environ []string, keysByFile map[string][]string, cwd string) (Plan, error) {
-	unchanged := Plan{Args: argv, Env: environ, Cleanup: func() error { return nil }}
+// When no service matches, the Plan carries in.Argv and in.Environ unchanged
+// and no file is written.
+func Prepare(ctx context.Context, in Input) (Plan, error) {
+	argv, environ, parent, cwd := in.Argv, in.Environ, in.Parent, in.Cwd
 	inv := parseArgs(argv)
-	files, err := composeFiles(inv, environ, cwd)
+	var warnings []string
+	if _, inParent := envValue(parent, composeFileVar); !inParent && inv.lastFileEnd == 0 {
+		if _, inChild := envValue(environ, composeFileVar); inChild {
+			warnings = append(warnings, "ignoring "+composeFileVar+" from an env file; set it in the environment or pass -f")
+		}
+	}
+	unchanged := Plan{Args: argv, Env: environ, Cleanup: func() error { return nil }, Warnings: warnings}
+	files, err := composeFiles(inv, parent, cwd)
 	if err != nil {
 		return Plan{}, err
 	}
 	if len(files) == 0 {
 		return unchanged, nil
 	}
-	services, err := matchServices(files, projectDir(inv, files, cwd), absKeys(keysByFile, cwd))
+	services, matched, err := matchServices(ctx, files, projectDir(inv, files, cwd), absKeys(in.Keys, cwd))
 	if err != nil {
 		return Plan{}, err
 	}
+	unchanged.Matched = matched
+	services, skipped := substitutable(services)
+	for _, k := range skipped {
+		warnings = append(warnings, k+" is not a name compose can substitute; containers will see the value from env_file")
+	}
+	unchanged.Warnings = warnings
 	if len(services) == 0 {
 		return unchanged, nil
 	}
@@ -102,7 +141,7 @@ func Prepare(argv, environ []string, keysByFile map[string][]string, cwd string)
 	if err != nil {
 		return Plan{}, err
 	}
-	plan := Plan{Args: argv, Env: environ, Cleanup: func() error { return os.Remove(path) }, Override: path}
+	plan := Plan{Args: argv, Env: environ, Cleanup: func() error { return os.Remove(path) }, Override: path, Matched: true, Warnings: warnings}
 	if inv.lastFileEnd > 0 {
 		args := slices.Clone(argv[:inv.lastFileEnd])
 		args = append(args, "-f", path)
@@ -110,12 +149,55 @@ func Prepare(argv, environ []string, keysByFile map[string][]string, cwd string)
 		plan.Args = args
 		return plan, nil
 	}
-	orig, ok := envValue(environ, composeFileVar)
+	// Compose reads both variables from its environment, and from the
+	// project's .env when they are unset there. Setting both makes compose
+	// split COMPOSE_FILE the way secretref built it.
+	sep := pathSeparator(parent)
+	orig, ok := envValue(parent, composeFileVar)
 	if !ok || orig == "" {
-		orig = strings.Join(files, pathSeparator(environ))
+		paths := make([]string, len(files))
+		for i, f := range files {
+			paths[i] = f.path
+		}
+		orig = strings.Join(paths, sep)
 	}
-	plan.Env = setEnv(environ, composeFileVar, orig+pathSeparator(environ)+path)
+	plan.Env = setEnv(setEnv(environ, composeFileVar, orig+sep+path), pathSeparatorVar, sep)
 	return plan, nil
+}
+
+// substitutable splits services into the keys compose can substitute as
+// ${KEY} and the sorted, distinct keys it cannot. Services left with no key
+// are dropped.
+func substitutable(services map[string][]string) (map[string][]string, []string) {
+	out := map[string][]string{}
+	var skipped []string
+	for name, keys := range services {
+		var ok []string
+		for _, k := range keys {
+			if isComposeName(k) {
+				ok = append(ok, k)
+			} else if !slices.Contains(skipped, k) {
+				skipped = append(skipped, k)
+			}
+		}
+		if len(ok) > 0 {
+			out[name] = ok
+		}
+	}
+	slices.Sort(skipped)
+	return out, skipped
+}
+
+// isComposeName reports whether compose interpolates ${name}: a letter or _,
+// then letters, digits, or _.
+func isComposeName(name string) bool {
+	for i, c := range name {
+		letter := c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+		if !letter && (i == 0 || c < '0' || c > '9') {
+			return false
+		}
+	}
+	return name != ""
 }
 
 // override is the YAML document written for compose.

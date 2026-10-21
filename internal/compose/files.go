@@ -1,7 +1,10 @@
 package compose
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -72,35 +75,68 @@ func parseArgs(argv []string) invocation {
 	return inv
 }
 
-// composeFiles returns the compose files compose will load, as absolute paths:
-// the -f flags, else COMPOSE_FILE, else the default files found from
+// composeFile is one compose file compose will load.
+type composeFile struct {
+	path string // absolute
+	// label names the file in errors.
+	label string
+}
+
+// composeFiles returns the compose files compose will load: the -f flags,
+// else COMPOSE_FILE from parent, else the default files found from
 // --project-directory or cwd upwards.
-func composeFiles(inv invocation, environ []string, cwd string) ([]string, error) {
-	var named []string
-	switch v, ok := envValue(environ, composeFileVar); {
-	case len(inv.files) > 0:
-		named = inv.files
-	case ok && v != "":
-		named = strings.Split(v, pathSeparator(environ))
-	default:
-		dir := cwd
-		if inv.projectDir != "" {
-			dir = absPath(inv.projectDir, cwd)
+//
+// SECURITY: parent is the environment secretref started with. Env-file values
+// never choose the files, because they can be built from a secret. Errors
+// name a COMPOSE_FILE entry by position, never by its text.
+func composeFiles(inv invocation, parent []string, cwd string) ([]composeFile, error) {
+	if len(inv.files) > 0 {
+		var files []composeFile
+		for _, f := range inv.files {
+			if f == "" || f == "-" {
+				continue
+			}
+			p := absPath(f, cwd)
+			if _, err := os.Stat(p); err != nil {
+				return nil, fmt.Errorf("compose file: %w", err)
+			}
+			files = append(files, composeFile{path: p, label: "compose file " + p})
 		}
-		return defaultFiles(dir), nil
+		return files, nil
 	}
-	var files []string
-	for _, f := range named {
-		if f == "" || f == "-" {
-			continue
+	if v, ok := envValue(parent, composeFileVar); ok && v != "" {
+		var files []composeFile
+		for i, f := range strings.Split(v, pathSeparator(parent)) {
+			if f == "" || f == "-" {
+				continue
+			}
+			label := fmt.Sprintf("compose file %d in %s", i+1, composeFileVar)
+			p := absPath(f, cwd)
+			if _, err := os.Stat(p); err != nil {
+				return nil, fmt.Errorf("%s: %w", label, pathCause(err))
+			}
+			files = append(files, composeFile{path: p, label: label})
 		}
-		p := absPath(f, cwd)
-		if _, err := os.Stat(p); err != nil {
-			return nil, fmt.Errorf("compose file: %w", err)
-		}
-		files = append(files, p)
+		return files, nil
+	}
+	dir := cwd
+	if inv.projectDir != "" {
+		dir = absPath(inv.projectDir, cwd)
+	}
+	var files []composeFile
+	for _, p := range defaultFiles(dir) {
+		files = append(files, composeFile{path: p, label: "compose file " + p})
 	}
 	return files, nil
+}
+
+// pathCause returns the reason inside a *fs.PathError without its path, or
+// a generic error for anything else.
+func pathCause(err error) error {
+	if pe, ok := errors.AsType[*fs.PathError](err); ok {
+		return pe.Err
+	}
+	return errors.New("cannot read the file")
 }
 
 // defaultFiles finds the compose files the way compose-go's
@@ -154,58 +190,94 @@ func exists(p string) bool {
 
 // projectDir is the directory compose resolves relative paths against:
 // --project-directory, else the first compose file's directory.
-func projectDir(inv invocation, files []string, cwd string) string {
+func projectDir(inv invocation, files []composeFile, cwd string) string {
 	if inv.projectDir != "" {
 		return absPath(inv.projectDir, cwd)
 	}
-	return filepath.Dir(files[0])
+	return filepath.Dir(files[0].path)
 }
 
 // composeDoc holds the part of a compose file secretref reads.
 type composeDoc struct {
 	Services map[string]struct {
-		EnvFile yaml.Node `yaml:"env_file"`
+		EnvFile     yaml.Node `yaml:"env_file"`
+		Environment yaml.Node `yaml:"environment"`
 	} `yaml:"services"`
 }
 
-// matchServices returns, per service, the sorted keys of every loaded env
-// file the service lists in env_file.
-func matchServices(files []string, dir string, keysByFile map[string][]string) (map[string][]string, error) {
-	sets := map[string]map[string]bool{}
+// matchServices returns, per service, the sorted keys the override sets: the
+// keys of every file in keysByFile the service lists in env_file, minus the
+// keys the service sets in environment: in any of the files. matched reports
+// whether any service lists a file in keysByFile.
+func matchServices(ctx context.Context, files []composeFile, dir string, keysByFile map[string][]string) (services map[string][]string, matched bool, err error) {
+	wanted := map[string]map[string]bool{}
+	own := map[string]map[string]bool{}
 	for _, f := range files {
-		data, err := os.ReadFile(f) //nolint:gosec // G304: a compose file the user's command names.
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		data, err := os.ReadFile(f.path)
 		if err != nil {
-			return nil, fmt.Errorf("compose file: %w", err)
+			return nil, false, fmt.Errorf("%s: %w", f.label, pathCause(err))
 		}
 		var doc composeDoc
 		if err := yaml.Unmarshal(data, &doc); err != nil {
-			return nil, fmt.Errorf("compose file %s: %w", f, err)
+			return nil, false, fmt.Errorf("%s: %w", f.label, err)
 		}
 		for name, svc := range doc.Services {
+			for _, k := range environmentKeys(&svc.Environment) {
+				addKey(own, name, k)
+			}
 			for _, p := range envFilePaths(&svc.EnvFile) {
-				keys := keysByFile[pathKey(absPath(p, dir), foldCase())]
-				if len(keys) == 0 {
-					continue
-				}
-				if sets[name] == nil {
-					sets[name] = map[string]bool{}
-				}
+				keys, ok := keysByFile[pathKey(absPath(p, dir), foldCase())]
+				matched = matched || ok
 				for _, k := range keys {
-					sets[name][k] = true
+					addKey(wanted, name, k)
 				}
 			}
 		}
 	}
-	out := make(map[string][]string, len(sets))
-	for name, set := range sets {
-		keys := make([]string, 0, len(set))
+	out := map[string][]string{}
+	for name, set := range wanted {
+		var keys []string
 		for k := range set {
-			keys = append(keys, k)
+			if !own[name][k] {
+				keys = append(keys, k)
+			}
 		}
-		slices.Sort(keys)
-		out[name] = keys
+		if len(keys) > 0 {
+			slices.Sort(keys)
+			out[name] = keys
+		}
 	}
-	return out, nil
+	return out, matched, nil
+}
+
+func addKey(sets map[string]map[string]bool, service, key string) {
+	if sets[service] == nil {
+		sets[service] = map[string]bool{}
+	}
+	sets[service][key] = true
+}
+
+// environmentKeys reads the names a service's environment: sets, in map form
+// (KEY: value, or KEY with no value) or list form (KEY=value, or KEY).
+func environmentKeys(n *yaml.Node) []string {
+	var keys []string
+	switch n.Kind {
+	case yaml.MappingNode:
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			keys = append(keys, n.Content[i].Value)
+		}
+	case yaml.SequenceNode:
+		for _, item := range n.Content {
+			if item.Kind == yaml.ScalarNode {
+				k, _, _ := strings.Cut(item.Value, "=")
+				keys = append(keys, k)
+			}
+		}
+	}
+	return keys
 }
 
 // envFilePaths reads env_file in any of its forms: a string, a list of
@@ -235,9 +307,9 @@ func envFilePaths(n *yaml.Node) []string {
 }
 
 // pathSeparator is the COMPOSE_FILE separator: COMPOSE_PATH_SEPARATOR when
-// set, else the OS path list separator.
-func pathSeparator(environ []string) string {
-	if v, ok := envValue(environ, "COMPOSE_PATH_SEPARATOR"); ok && v != "" {
+// set in parent, else the OS path list separator.
+func pathSeparator(parent []string) string {
+	if v, ok := envValue(parent, pathSeparatorVar); ok && v != "" {
 		return v
 	}
 	return string(os.PathListSeparator)

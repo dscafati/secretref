@@ -1,8 +1,11 @@
 # docker compose gets the values through its environment and an override
-# that holds only ${KEY} names; the override is removed afterwards.
+# that holds only ${KEY} names; the override is removed afterwards. Plain
+# keys (DB_HOST) and keys a service sets itself (api) stay out of it.
 exec secretref run -- docker compose -show-compose DB_PASSWORD
 stdout 'DB_PASSWORD: \$\{DB_PASSWORD\}'
 ! stdout 'OTHER'
+! stdout 'DB_HOST'
+! stdout 'api:'
 grep '^DB_PASSWORD=SR_CANARY_7f3a9c$' child-env.txt
 no-canary
 no-override
@@ -25,6 +28,7 @@ services:
   other:
     image: alpine
 -- .env --
+DB_HOST=localhost
 # secretref: keyring://app/db_password
 DB_PASSWORD=localdev
 -- other.env --
@@ -34,6 +38,11 @@ services:
   web:
     image: alpine
     env_file: .env
+  api:
+    image: alpine
+    env_file: .env
+    environment:
+      - DB_PASSWORD=set-by-compose
   worker:
     image: alpine
     env_file:

@@ -1,0 +1,20 @@
+services:
+  map_form:
+    image: alpine
+    env_file: .env
+    environment:
+      A: set-by-compose
+      B:
+  list_form:
+    image: alpine
+    env_file: .env
+    environment:
+      - A=set-by-compose
+      - C
+  sets_all:
+    image: alpine
+    env_file: .env
+    environment: [A, B, C, D]
+  no_environment:
+    image: alpine
+    env_file: .env
