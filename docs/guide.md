@@ -130,7 +130,7 @@ loader reads the same value from the file.
   are expanded.
 - Double-quoted values process `\n`, `\r`, `\t`, `\"`, `\\`, and `\$`.
 - Quoted values may span several lines.
-- Backtick quotes are not supported.
+- Backtick quotes are not supported. A backtick is an ordinary character.
 - LF and CRLF line endings both work.
 - A line that does not parse is skipped, as other dotenv loaders skip it.
   secretref prints `secretref: warning: <file>:<line>: skipped unparseable line`
@@ -140,6 +140,24 @@ loader reads the same value from the file.
 
 Quote any value that contains `#`, so every dotenv loader reads it the same
 way.
+
+### Differences from other dotenv loaders
+
+Dotenv loaders do not agree on every detail. Where they differ, secretref
+follows python-dotenv and Docker Compose. Write files that every loader reads
+the same way:
+
+| In the file | secretref | Differs in | Portable form |
+|---|---|---|---|
+| `A=abc#def` | `abc#def` | Node `dotenv` strips it to `abc`. | `A="abc#def"` |
+| ``A=`text` `` | `` `text` `` with the backticks | Node `dotenv` reads backticks as quotes. | `A="text"` or `A='text'` |
+| `export KEY` | Skipped with a warning. | Shells export an existing `KEY`. | `export KEY=value` |
+| `A=pa$word` | `pa$word` | Node `dotenv-expand` expands `$word`. | `A='pa$word'` |
+| `URL=${HOST}:80` | Expands `HOST`. | Loaders without expansion keep `${HOST}`. | Write the value out. |
+| `my-key=x` | Accepted. | Some loaders reject `-` or `.` in keys, and `${my-key}` does not expand anywhere, Compose included. | `MY_KEY=x` |
+
+A line that does not parse is skipped with a warning. See
+[Env file syntax](#env-file-syntax).
 
 ## Variable expansion
 
