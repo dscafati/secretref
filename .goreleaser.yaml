@@ -94,13 +94,29 @@ homebrew_casks:
       token: "{{ .Env.TAP_GITHUB_TOKEN }}"
     homepage: https://github.com/dscafati/secretref
     description: Resolve secrets from vaults using reference comments in .env files
+    # Prerelease tags (v0.1.0-rc.1) leave the cask in dist/ and push nothing.
+    skip_upload: auto
     binaries:
       - secretref
     manpages:
       - man/secretref.1
+    completions:
+      bash: completions/secretref.bash
+      zsh: completions/secretref.zsh
+      fish: completions/secretref.fish
+    # The macOS binaries are not signed or notarized. Without this, Gatekeeper
+    # blocks the first run of a binary downloaded by Homebrew.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/secretref"]
+          end
 
 scoops:
   - name: secretref
+    # Prerelease tags leave the manifest in dist/ and push nothing.
+    skip_upload: auto
     repository:
       owner: dscafati
       name: scoop-bucket
@@ -132,6 +148,9 @@ winget:
   - name: secretref
     publisher: dscafati
     package_identifier: dscafati.secretref
+    # Prerelease tags leave the manifests in dist/ and open no pull request on
+    # microsoft/winget-pkgs.
+    skip_upload: auto
     short_description: Resolve secrets from vaults using reference comments in .env files
     license: Apache-2.0
     homepage: https://github.com/dscafati/secretref
