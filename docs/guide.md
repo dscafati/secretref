@@ -116,6 +116,26 @@ In both modes, a variable already in the environment wins. A key whose
 reference failed under `--allow-missing` is not injected by default; the app's
 loader reads the same value from the file.
 
+secretref builds a derived value only from the files it loads: `.env` and
+`.env.local`, or the `--env-file` list. It does not read your framework's mode
+files. With this `.env`:
+
+```dotenv
+DB_HOST=localhost
+# secretref: keyring://myapp/DB_PASSWORD
+DB_PASSWORD=localdev
+DATABASE_URL=postgres://app:${DB_PASSWORD}@${DB_HOST}/app
+```
+
+and `DB_HOST=db.dev` in `.env.development`, the injected `DATABASE_URL` uses
+`localhost`. It is already in the environment, so the framework keeps it over
+any `DATABASE_URL` it would build from `.env.development`. List the mode file
+yourself to build the value from it:
+
+```sh
+secretref run --env-file .env --env-file .env.development -- npm run dev
+```
+
 `check` is not affected. See
 [decision 0016](decisions/0016-inject-annotated-keys-by-default.md).
 
@@ -453,8 +473,19 @@ Limits:
   `_` that do not start with a digit. A resolved key with another name, such
   as `app.port`, is left out of the override with a warning, and the
   containers see its value from `env_file:`.
-- `COMPOSE_FILE` set in an env file does not choose the compose files. secretref
-  prints a warning; set it in your shell or pass `-f` instead.
+- `COMPOSE_FILE` set in an env file does not choose the compose files, with
+  or without `--all`. secretref removes `COMPOSE_FILE` and
+  `COMPOSE_PATH_SEPARATOR` that come from an env file from Compose's
+  environment. Without `-f` it sets `COMPOSE_FILE` to the files it found (plus
+  the override), so Compose does not read the value from `.env` either, and
+  prints a warning that names the variable. Set `COMPOSE_FILE` in your shell or
+  pass `-f` instead.
+- Variables named `COMPOSE_*` are Compose's own settings. They never go in the
+  override.
+- secretref reads only the `services:` of each compose file. It does not
+  follow `include:` or `extends:`, and it does not expand `${...}` in
+  `env_file:` paths. A service defined or given its `env_file:` that way gets
+  no override, and its containers see the file values.
 
 `docker compose config` prints the resolved values. Its stdout belongs to
 Compose, not to secretref. See [SECURITY.md](../SECURITY.md).
