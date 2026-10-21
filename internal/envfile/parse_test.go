@@ -156,7 +156,8 @@ func TestParseAnnotationAttachesRef(t *testing.T) {
 func TestParseInvalidRefDoesNotEchoText(t *testing.T) {
 	tests := []struct{ in, want string }{
 		{"# secretref: hunter2-s3cret\nK=v\n", "invalid reference"},
-		{"# secretref: nope://hunter2-s3cret/x\nK=v\n", "invalid reference"},
+		{"# secretref: nope://hunter2-s3cret/x\nK=v\n", "invalid reference: unknown scheme; supported: aws-sm, gcp-sm, keyring"},
+		{"# secretref: hunter2-s3cret://x/y\nK=v\n", "invalid reference: unknown scheme; supported: aws-sm, gcp-sm, keyring"},
 		{"# secretref: keyring://hunter2-s3cret\nK=v\n", "invalid reference (scheme keyring)"},
 		{"# secretref: aws-sm://r/n?hunter2-s3cret=1\nK=v\n", "invalid reference (scheme aws-sm)"},
 	}
@@ -168,8 +169,8 @@ func TestParseInvalidRefDoesNotEchoText(t *testing.T) {
 		if strings.Contains(err.Error(), "hunter2") {
 			t.Errorf("error echoes pasted text: %v", err)
 		}
-		if !strings.Contains(err.Error(), tt.want) {
-			t.Errorf("error %q lacks %q", err, tt.want)
+		if !strings.HasSuffix(err.Error(), tt.want) {
+			t.Errorf("error %q does not end with %q", err, tt.want)
 		}
 	}
 }

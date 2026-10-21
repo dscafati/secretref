@@ -116,7 +116,7 @@ func (p *parser) comment(text string, lineNo int) error {
 	if err != nil {
 		// SECURITY: never echo the annotation text; a secret may have been
 		// pasted there. Only a recognized scheme name is safe to show.
-		return p.errAt(lineNo, "invalid reference%s", knownScheme(m[1]))
+		return p.errAt(lineNo, "invalid reference%s", schemeHint(m[1]))
 	}
 	p.pending, p.pendingLine = &r, lineNo
 	return nil
@@ -269,12 +269,19 @@ func (p *parser) afterQuote(rest string, lineNo int) error {
 	return p.errAt(lineNo, "unexpected text after quoted value")
 }
 
-// knownScheme returns " (scheme X)" when raw starts with a supported scheme,
+// schemeHint returns " (scheme X)" when raw starts with a supported scheme X,
+// a list of the supported schemes when raw starts with another "<scheme>://",
 // and "" otherwise.
-func knownScheme(raw string) string {
+//
+// SECURITY: an unknown scheme is never returned; it may be pasted secret text.
+func schemeHint(raw string) string {
 	scheme, _, ok := strings.Cut(raw, "://")
-	if ok && slices.Contains(ref.Schemes(), scheme) {
+	if !ok {
+		return ""
+	}
+	supported := ref.Schemes()
+	if slices.Contains(supported, scheme) {
 		return " (scheme " + scheme + ")"
 	}
-	return ""
+	return ": unknown scheme; supported: " + strings.Join(supported, ", ")
 }
