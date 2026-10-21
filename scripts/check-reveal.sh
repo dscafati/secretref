@@ -6,7 +6,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 status=0
-for f in $(find . -name '*.go' -not -name '*_test.go' -not -path './tools/*' -not -path './.git/*'); do
+for f in $(find . -name '*.go' -not -name '*_test.go' -not -path './tools/*' -not -path './.*'); do
   out=$(awk '
     { line[NR] = $0 }
     /\.Reveal\(\)/ && $0 !~ /^func / {
