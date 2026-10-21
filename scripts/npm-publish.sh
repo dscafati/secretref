@@ -8,6 +8,7 @@
 # npm with a trusted publisher configured. Every package is checked before any
 # is published. `npm-publish.sh preflight` runs only that check and needs no
 # dist/, so the release workflow can stop before GoReleaser publishes anything.
+# It also checks that npm is new enough for trusted publishing.
 # docs/releasing.md describes the one-time bootstrap.
 set -euo pipefail
 
@@ -28,10 +29,24 @@ package_exists() {
   exit 1
 }
 
-# preflight: fail unless every package already exists on npm. The names come
-# from the launcher's optionalDependencies plus the launcher itself.
+# npm_supports_oidc: fail unless npm can do trusted publishing (11.5.1 or later).
+# The release workflow uses the npm that ships with Node instead of installing one.
+npm_supports_oidc() {
+  local v
+  v="$(npm --version)"
+  if [ "$(printf '%s\n' 11.5.1 "$v" | sort -V | head -n 1)" != 11.5.1 ]; then
+    echo "npm $v is older than 11.5.1, which trusted publishing needs." >&2
+    echo "Use a Node release that bundles a newer npm." >&2
+    exit 1
+  fi
+}
+
+# preflight: fail unless npm supports trusted publishing and every package
+# already exists on npm. The names come from the launcher's
+# optionalDependencies plus the launcher itself.
 preflight() {
   local name missing=()
+  npm_supports_oidc
   while read -r name; do
     package_exists "$name" || missing+=("$name")
   done < <(jq -r '.optionalDependencies | keys[]' "$root/npm/secretref/package.json"; echo secretref)

@@ -37,10 +37,9 @@ jobs:
           node-version: "24"
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
-      - name: Ensure npm supports trusted publishing
-        run: npm install -g npm@11.6.2
-      # Trusted publishing cannot create packages. Stop before GoReleaser
-      # publishes anything if an npm package has not been bootstrapped.
+      # Trusted publishing cannot create packages and needs npm 11.5.1 or
+      # later. Stop before GoReleaser publishes anything if an npm package has
+      # not been bootstrapped or Node's bundled npm is too old.
       - name: Check npm packages exist
         run: scripts/npm-publish.sh preflight
       - uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
@@ -97,10 +96,9 @@ jobs:
           node-version: "24"
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
-      - name: Ensure npm supports trusted publishing
-        run: npm install -g npm@11.6.2
-      # Trusted publishing cannot create packages. Stop before GoReleaser
-      # publishes anything if an npm package has not been bootstrapped.
+      # Trusted publishing cannot create packages and needs npm 11.5.1 or
+      # later. Stop before GoReleaser publishes anything if an npm package has
+      # not been bootstrapped or Node's bundled npm is too old.
       - name: Check npm packages exist
         run: scripts/npm-publish.sh preflight
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
