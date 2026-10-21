@@ -91,8 +91,10 @@ func TestEnvWins(t *testing.T) {
 	if len(f.Calls()) != 0 {
 		t.Errorf("resolved despite env: %v", f.Calls())
 	}
-	if got := res.Environ([]string{"A=fromenv"}); !slices.Equal(got, []string{"A=fromenv"}) {
-		t.Errorf("Environ = %v", got)
+	for _, all := range []bool{false, true} {
+		if got := res.Environ([]string{"A=fromenv"}, all); !slices.Equal(got, []string{"A=fromenv"}) {
+			t.Errorf("Environ(all=%v) = %v", all, got)
+		}
 	}
 
 	res = newResolver(f, env, resolve.Options{IgnoreEnv: true}).Resolve(context.Background(), entries)
@@ -313,11 +315,67 @@ func TestEnviron(t *testing.T) {
 	f.Put("keyring://s/a", "sec")
 	env := envOf(map[string]string{"E": "e"})
 	res := newResolver(f, env, resolve.Options{}).Resolve(context.Background(), []envfile.Entry{
-		plain(".env", "E", "x"), plain(".env", "P", "p"), {File: ".env", Key: "S", Ref: mustRef(t, "keyring://s/a")},
+		plain(".env", "E", "x"), plain(".env", "P", "p"),
+		{File: ".env", Key: "S", Ref: mustRef(t, "keyring://s/a")},
+		plain(".env", "D", "<${S}>"),
 	})
-	got := res.Environ([]string{"Z=1", "E=e"})
-	if want := []string{"Z=1", "E=e", "P=p", "S=sec"}; !slices.Equal(got, want) {
+	got := res.Environ([]string{"Z=1", "E=e"}, false)
+	if want := []string{"Z=1", "E=e", "S=sec", "D=<sec>"}; !slices.Equal(got, want) {
 		t.Errorf("Environ = %v, want %v", got, want)
+	}
+	got = res.Environ([]string{"Z=1", "E=e"}, true)
+	if want := []string{"Z=1", "E=e", "P=p", "S=sec", "D=<sec>"}; !slices.Equal(got, want) {
+		t.Errorf("Environ(all) = %v, want %v", got, want)
+	}
+}
+
+// TestInjected covers which variables run injects by default: keys that
+// resolved, and plain keys whose value expands from one, directly or through
+// other keys.
+func TestInjected(t *testing.T) {
+	f := fake.New()
+	f.Put("keyring://s/pw", "real")
+	f.Fail("keyring://s/gone", provider.ErrNotFound)
+	env := envOf(map[string]string{"ENVPW": "e", "HOME_X": "/h"})
+	entries := []envfile.Entry{
+		{File: ".env", Key: "PW", Ref: mustRef(t, "keyring://s/pw")},
+		{File: ".env", Key: "ENVPW", Value: "fb", Ref: mustRef(t, "keyring://s/pw")},
+		{File: ".env", Key: "GONE", Value: "fb", Ref: mustRef(t, "keyring://s/gone")},
+		plain(".env", "PLAIN", "x"),
+		plain(".env", "URL", "u:${PW}@h"),
+		plain(".env", "CHAIN", "[${URL}]"),
+		plain(".env", "LATER", "${CHAIN2}"),
+		plain(".env", "CHAIN2", "${PW:-d}"),
+		plain(".env", "FROMENV", "${ENVPW}"),
+		plain(".env", "FROMHOME", "${HOME_X}"),
+		plain(".env", "FROMGONE", "${GONE}"),
+		plain(".env", "DEFAULT", "${NOPE:-x}"),
+		plain(".env", "BARE", "$PW"),
+		plain(".env", "ESCAPED", "$${PW}"),
+		{File: ".env", Key: "SINGLE", Value: "${PW}", Quote: envfile.QuoteSingle},
+		plain(".env", "CYC1", "${CYC2}${PW}"),
+		plain(".env", "CYC2", "${CYC1}"),
+	}
+	res := newResolver(f, env, resolve.Options{AllowMissing: true}).Resolve(context.Background(), entries)
+	got := map[string]bool{}
+	for _, v := range res.Vars {
+		got[v.Key] = v.Injected
+	}
+	want := map[string]bool{
+		"PW": true, "ENVPW": false, "GONE": false, "PLAIN": false,
+		"URL": true, "CHAIN": true, "LATER": true, "CHAIN2": true,
+		"FROMENV": false, "FROMHOME": false, "FROMGONE": false, "DEFAULT": false,
+		"BARE": false, "ESCAPED": false, "SINGLE": false,
+		"CYC1": true, "CYC2": false, // CYC2 closes the cycle and expands to "".
+
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Injected (-want +got):\n%s", diff)
+	}
+	for _, v := range res.Vars {
+		if (v.Ref != nil) != (v.Key == "PW" || v.Key == "ENVPW" || v.Key == "GONE") {
+			t.Errorf("%s: Ref = %v changed meaning", v.Key, v.Ref)
+		}
 	}
 }
 

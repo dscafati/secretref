@@ -3,7 +3,15 @@
 exec secretref run -- docker compose -show-compose DB_PASSWORD
 stdout 'DB_PASSWORD: \$\{DB_PASSWORD\}'
 ! stdout 'OTHER'
+! stdout 'PLAIN'
 grep '^DB_PASSWORD=SR_CANARY_7f3a9c$' child-env.txt
+no-canary
+no-override
+
+# With --all the override names plain keys too, since they are injected.
+exec secretref run --all -- docker compose -show-compose PLAIN
+stdout 'PLAIN: \$\{PLAIN\}'
+grep '^PLAIN=plain$' child-env.txt
 no-canary
 no-override
 
@@ -25,6 +33,7 @@ services:
   other:
     image: alpine
 -- .env --
+PLAIN=plain
 # secretref: keyring://app/db_password
 DB_PASSWORD=localdev
 -- other.env --

@@ -29,6 +29,8 @@ Never install tools globally and never edit tool versions anywhere else.
 - Exit codes: the child's code; 1 internal; 2 usage or no env file; 3 resolution failed; 127 command not found.
 - Defaults: env files `.env` then `.env.local`; concurrency 8; timeout 30s.
 - The existing process environment wins over file values and is never resolved.
+- `run` injects resolved keys and the plain keys built from them with `${...}`;
+  `--all` injects every file variable (ADR 0016). `check` is unaffected.
 - `set` and `delete` accept only `keyring://`.
 - Providers in v0.1: `aws-sm`, `gcp-sm`, `keyring`. Nothing else.
 - `CGO_ENABLED=0` must build for linux, darwin, windows on amd64 and arm64.

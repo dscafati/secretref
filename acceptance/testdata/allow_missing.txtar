@@ -1,6 +1,13 @@
 # --allow-missing keeps the file's value for a failed reference and warns.
+# The key did not resolve, so it is left to the app's dotenv loader unless
+# --all is given.
 exec secretref run --allow-missing -- printenv-helper MISSING DB_PASSWORD
 stderr '^secretref: warning: MISSING  keyring://app/missing  not found; using the value from \.env$'
+grep '^MISSING unset$' child-env.txt
+grep '^DB_PASSWORD=SR_CANARY_7f3a9c$' child-env.txt
+no-canary
+
+exec secretref run --allow-missing --all -- printenv-helper MISSING DB_PASSWORD
 grep '^MISSING=fallback$' child-env.txt
 grep '^DB_PASSWORD=SR_CANARY_7f3a9c$' child-env.txt
 no-canary

@@ -1,13 +1,19 @@
-# Plain and annotated variables from every provider reach the child, and
-# secretref prints nothing.
+# Annotated variables from every provider reach the child, plain variables
+# are left to the app's dotenv loader, and secretref prints nothing.
 exec secretref run -- printenv-helper PLAIN DB_PASSWORD API_KEY AWS_PASSWORD
 ! stdout .
 ! stderr .
 no-canary
-grep '^PLAIN=hello$' child-env.txt
+grep '^PLAIN unset$' child-env.txt
 grep '^DB_PASSWORD=SR_CANARY_7f3a9c$' child-env.txt
 grep '^API_KEY=SR_CANARY_7f3a9c$' child-env.txt
 grep '^AWS_PASSWORD=SR_CANARY_7f3a9c$' child-env.txt
+
+# --all injects plain variables too.
+exec secretref run --all -- printenv-helper PLAIN DB_PASSWORD
+grep '^PLAIN=hello$' child-env.txt
+grep '^DB_PASSWORD=SR_CANARY_7f3a9c$' child-env.txt
+no-canary
 
 # --verbose names keys and refs on stderr, never values.
 exec secretref run --verbose -- printenv-helper DB_PASSWORD

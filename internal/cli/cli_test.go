@@ -191,7 +191,7 @@ func TestRunNoEnvFile(t *testing.T) {
 func TestRunInjects(t *testing.T) {
 	h := newHarness(t)
 	h.write(".env", annotatedEnv)
-	h.write(".env.local", "C=${B}@host\n")
+	h.write(".env.local", "C=${B}@host\nD=[${C}]\nE=${A}\n")
 	h.expect(0, "run", "--", "tool", "arg with space")
 	if len(h.calls) != 1 || h.calls[0].how != directMode() {
 		t.Fatalf("calls = %v", h.calls)
@@ -200,13 +200,36 @@ func TestRunInjects(t *testing.T) {
 	if diff := cmp.Diff([]string{"tool", "arg with space"}, c.argv); diff != "" {
 		t.Errorf("argv (-want +got):\n%s", diff)
 	}
-	for k, want := range map[string]string{"A": "1", "B": canary, "C": canary + "@host", "PATH": "/usr/bin"} {
+	for k, want := range map[string]string{"B": canary, "C": canary + "@host", "D": "[" + canary + "@host]", "PATH": "/usr/bin"} {
 		if got, _ := envOf(c.env, k); got != want {
 			t.Errorf("%s = %q, want %q", k, got, want)
 		}
 	}
+	// Plain keys that do not use a resolved key are left to the app's own
+	// dotenv loader.
+	for _, k := range []string{"A", "E"} {
+		if got, ok := envOf(c.env, k); ok {
+			t.Errorf("%s = %q injected, want it left out", k, got)
+		}
+	}
 	if h.stdout.Len() != 0 || h.stderr.Len() != 0 {
 		t.Errorf("run is not silent: stdout %q stderr %q", h.stdout.String(), h.stderr.String())
+	}
+}
+
+func TestRunAllInjectsEveryVariable(t *testing.T) {
+	h := newHarness(t)
+	h.write(".env", annotatedEnv)
+	h.write(".env.local", "C=${B}@host\nE=${A}\n")
+	h.env["A"] = "from-env"
+	h.expect(0, "run", "--all", "--", "tool")
+	for k, want := range map[string]string{"A": "from-env", "B": canary, "C": canary + "@host", "E": "from-env"} {
+		if got, _ := envOf(h.calls[0].env, k); got != want {
+			t.Errorf("%s = %q, want %q", k, got, want)
+		}
+	}
+	if n := strings.Count(strings.Join(h.calls[0].env, "\n"), "A="); n != 1 {
+		t.Errorf("A appears %d times; the environment must win", n)
 	}
 }
 
@@ -227,7 +250,7 @@ func TestRunEnvFileFlag(t *testing.T) {
 	h := newHarness(t)
 	h.write("custom.env", "X=custom\n")
 	h.write(".env", "X=default\n")
-	h.expect(0, "run", "--env-file", "custom.env", "--", "tool")
+	h.expect(0, "run", "--all", "--env-file", "custom.env", "--", "tool")
 	if got, _ := envOf(h.calls[0].env, "X"); got != "custom" {
 		t.Errorf("X = %q, want custom", got)
 	}
@@ -277,7 +300,13 @@ func TestRunAllowMissing(t *testing.T) {
 	h := newHarness(t)
 	h.write(".env", "# secretref: keyring://app/missing\nM=fallback\n")
 	h.expect(0, "run", "--allow-missing", "--", "tool")
-	if got, _ := envOf(h.calls[0].env, "M"); got != "fallback" {
+	// A key that fell back is not resolved, so only --all injects it; the
+	// app's dotenv loader reads the same value otherwise.
+	if got, ok := envOf(h.calls[0].env, "M"); ok {
+		t.Errorf("M = %q injected without --all", got)
+	}
+	h.expect(0, "run", "--allow-missing", "--all", "--", "tool")
+	if got, _ := envOf(h.calls[1].env, "M"); got != "fallback" {
 		t.Errorf("M = %q, want fallback", got)
 	}
 	want := "secretref: warning: M  keyring://app/missing  not found; using the value from .env\n"
@@ -340,6 +369,7 @@ func TestRunCompose(t *testing.T) {
 	h.write("compose.yaml", "services:\n  web:\n    image: alpine\n    env_file: .env\n")
 	h.spawnCode = 4
 	var override string
+	wantA := false
 	h.duringRun = func(s started) {
 		v, _ := envOf(s.env, "COMPOSE_FILE")
 		parts := strings.Split(v, string(os.PathListSeparator))
@@ -351,6 +381,10 @@ func TestRunCompose(t *testing.T) {
 		if !strings.Contains(string(data), "B: ${B}") || strings.Contains(string(data), canary) {
 			t.Errorf("override = %q", data)
 		}
+		// A is not injected, so naming it would blank the env_file value.
+		if strings.Contains(string(data), "A: ${A}") != wantA {
+			t.Errorf("override = %q, want A named: %v", data, wantA)
+		}
 	}
 	h.expect(4, "run", "--", "docker", "compose", "up")
 	if len(h.calls) != 1 || h.calls[0].how != "spawn" {
@@ -361,6 +395,11 @@ func TestRunCompose(t *testing.T) {
 	}
 	if _, err := os.Stat(override); !os.IsNotExist(err) {
 		t.Errorf("override not removed: %v", err)
+	}
+	wantA = true
+	h.expect(4, "run", "--all", "--", "docker", "compose", "up")
+	if got, _ := envOf(h.calls[1].env, "A"); got != "1" {
+		t.Errorf("A = %q with --all", got)
 	}
 }
 

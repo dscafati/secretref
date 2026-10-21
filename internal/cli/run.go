@@ -34,6 +34,7 @@ type runOptions struct {
 	allowMissing bool
 	timeout      time.Duration
 	verbose      bool
+	all          bool
 }
 
 func newRunCmd(d Deps) *cobra.Command {
@@ -42,14 +43,19 @@ func newRunCmd(d Deps) *cobra.Command {
 		Use:   "run [flags] -- <command> [args...]",
 		Short: "Resolve annotated variables and start a command",
 		Long: `Run loads .env then .env.local (or the --env-file list), resolves annotated
-variables that are not already set in the environment, and starts the command
-with every file variable in its environment. Variables already set win.
+variables that are not already set in the environment, and starts the command.
+
+By default the command gets the resolved variables and the variables whose
+values are built from them with ${...}. Other variables are left to the app's
+own dotenv loader. --all gives the command every variable from the files.
+Variables already set in the environment always win.
 
 On Unix secretref replaces itself with the command. On Windows, and for
 "docker compose", it starts the command as a child, forwards interrupts, and
 exits with the child's exit code.`,
 		Example: `  secretref run -- npm start
   secretref run --env-file .env.staging -- ./server
+  secretref run --all -- ./server
   secretref run -- docker compose up`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runRun(cmd.Context(), d, o, cmd.ArgsLenAtDash(), args)
@@ -57,9 +63,10 @@ exits with the child's exit code.`,
 	}
 	f := cmd.Flags()
 	f.StringArrayVar(&o.envFiles, "env-file", nil, "env `file` to load; repeatable; replaces .env and .env.local")
-	f.BoolVar(&o.allowMissing, "allow-missing", false, "use the file's value for references that fail, with a warning")
+	f.BoolVar(&o.allowMissing, "allow-missing", false, "warn and keep the file's value for references that fail, instead of exiting 3")
 	f.DurationVar(&o.timeout, "timeout", defaultTimeout, "time limit for resolving all references")
 	f.BoolVar(&o.verbose, "verbose", false, "log which key resolved from which reference (never values)")
+	f.BoolVar(&o.all, "all", false, "give the command every variable from the files, not only resolved ones and those built from them")
 	return cmd
 }
 
@@ -98,9 +105,9 @@ func runRun(ctx context.Context, d Deps, o runOptions, dash int, argv []string) 
 		logResolved(newLogger(d.Stderr), res)
 	}
 
-	env := res.Environ(d.Environ())
+	env := res.Environ(d.Environ(), o.all)
 	if compose.Detect(argv) {
-		return runCompose(ctx, d, argv, env, keysByFile(entries, res), cwd)
+		return runCompose(ctx, d, argv, env, keysByFile(entries, res, o.all), cwd)
 	}
 	if runtime.GOOS == "windows" {
 		code, err := d.Spawn(ctx, argv, env)
@@ -207,10 +214,12 @@ func loadEntries(ctx context.Context, stderr io.Writer, cwd string, flagged []st
 
 // keysByFile maps each loaded file to the keys it defines that the child
 // receives from secretref, so compose services listing that file get them.
-func keysByFile(entries []envfile.Entry, res resolve.Result) map[string][]string {
+// It must name exactly the keys Environ added: a named key missing from the
+// environment would blank the service's env_file value.
+func keysByFile(entries []envfile.Entry, res resolve.Result, all bool) map[string][]string {
 	injected := map[string]bool{}
 	for _, v := range res.Vars {
-		if !v.FromEnv {
+		if !v.FromEnv && (all || v.Injected) {
 			injected[v.Key] = true
 		}
 	}

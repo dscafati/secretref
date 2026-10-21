@@ -6,6 +6,7 @@ every flag, see the [command reference](reference/secretref.md).
 
 - [Annotations](#annotations)
 - [Which files load](#which-files-load)
+- [What run injects](#what-run-injects)
 - [Env file syntax](#env-file-syntax)
 - [Variable expansion](#variable-expansion)
 - [Dotenv loaders that override](#dotenv-loaders-that-override)
@@ -81,9 +82,42 @@ To use the secret from the file instead, unset the variable first:
 env -u DB_PASSWORD secretref run -- npm start
 ```
 
-`run` gives the child the whole existing environment plus every variable from
-the files, annotated or not. See
-[decision 0004](decisions/0004-inject-all-variables-environment-wins.md).
+## What run injects
+
+`run` gives the command the whole existing environment plus, by default:
+
+- each annotated variable whose reference resolved, and
+- each variable whose value is built from one of those with `${...}`,
+  directly or through other variables.
+
+```dotenv
+# secretref: keyring://myapp/DB_PASSWORD
+DB_PASSWORD=localdev
+DATABASE_URL=postgres://app:${DB_PASSWORD}@localhost:5432/app
+LOG_LEVEL=info
+```
+
+Here the command gets `DB_PASSWORD` and `DATABASE_URL` with the real password.
+It does not get `LOG_LEVEL` from secretref. Your app's own dotenv loader reads
+`LOG_LEVEL` from the file, as it does without secretref. This keeps
+mode-specific files working: if your framework loads `.env.development` over
+`.env`, its values still win, because secretref did not put `.env`'s values in
+the environment first.
+
+`run --all` gives the command every variable from the files, annotated or not.
+Use it when the app has no dotenv loader of its own, such as a Go binary that
+calls `os.Getenv` or a shell script:
+
+```sh
+secretref run --all -- ./server
+```
+
+In both modes, a variable already in the environment wins. A key whose
+reference failed under `--allow-missing` is not injected by default; the app's
+loader reads the same value from the file.
+
+`check` is not affected. See
+[decision 0016](decisions/0016-inject-annotated-keys-by-default.md).
 
 ## Env file syntax
 
@@ -299,9 +333,13 @@ number.
 
 - `--env-file <file>`: load this file instead of `.env` and `.env.local`.
   Repeatable.
-- `--allow-missing`: when a reference fails for any reason, use the value from
+- `--all`: give the command every variable from the files, not only the
+  resolved ones and those built from them. See
+  [What run injects](#what-run-injects).
+- `--allow-missing`: when a reference fails for any reason, keep the value from
   the file and print a warning on stderr. Without it, any failure stops
-  secretref with exit 3 and the command does not start.
+  secretref with exit 3 and the command does not start. The key is injected
+  only with `--all`; otherwise the app's dotenv loader reads the file value.
 - `--timeout <duration>`: the time limit for resolving all references
   together, for example `10s` or `2m`. The default is `30s`. References still
   pending at the limit fail as `unavailable`.
@@ -360,8 +398,10 @@ secretref run -- docker compose up
    `compose.yml`, `docker-compose.yaml`, `docker-compose.yml`) in the current
    directory or a parent directory.
 2. It finds the services whose `env_file:` lists a file that secretref loaded.
-3. It writes a temporary override file with mode 0600. The file holds names
-   only, in the form `KEY: ${KEY}`. It never holds a value.
+3. It writes a temporary override file with mode 0600. The file holds the
+   names of the keys that secretref injects (see
+   [What run injects](#what-run-injects)), in the form `KEY: ${KEY}`. It never
+   holds a value.
 4. It starts `docker compose` with the override added. Compose fills in
    `${KEY}` from the environment that secretref set. `environment:` takes
    precedence over `env_file:`, so the containers get the resolved values.
@@ -429,3 +469,7 @@ A reference that does not parse, such as one with an unknown scheme, is caught
 when the file loads. It is a usage error, exit 2, not a resolution failure.
 
 `secretref run --verbose` shows which keys resolved from which references.
+
+If your command does not see a variable that has no annotation, it has no
+dotenv loader of its own, or the loader does not read that file. Use
+`secretref run --all`. See [What run injects](#what-run-injects).
