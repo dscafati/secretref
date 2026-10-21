@@ -17,6 +17,8 @@ Used by human and automated reviewers. Rules come from [AGENTS.md](../AGENTS.md)
 - Hand edits under `docs/reference/`.
 - Exported names without doc comments; `TODO` without an issue number.
 - `fmt.Print*`, `log.*`, `io/ioutil`, `pkg/errors`, or testify.
+- A `workflow_dispatch` or dry-run path that can read secrets, request `id-token`, or use the `release` environment. Dispatch and dry-run paths get none of them and cannot publish.
+- A new Go package without `doc.go`.
 - Commit trailers naming an AI tool, or `Claude-Session:`.
 
 ## Do not flag

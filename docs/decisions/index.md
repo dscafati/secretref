@@ -26,3 +26,4 @@ A record has one of these statuses:
 | 0013 | [Sequential decision numbers](0013-sequential-decision-numbers.md) | Accepted |
 | 0014 | [Generated decision index](0014-generated-decision-index.md) | Accepted |
 | 0015 | [Manual dependency injection; immutable package-level values allowed](0015-manual-dependency-injection-immutable-globals.md) | Accepted |
+| 0017 | [Provider interfaces live in the provider package](0017-provider-interfaces-live-in-the-provider-package.md) | Accepted |

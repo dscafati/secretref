@@ -13,7 +13,9 @@ tools cannot.
   Nothing reassigns them. See
   [decision 0015](decisions/0015-manual-dependency-injection-immutable-globals.md).
 - Define small interfaces in the package that consumes them, not the one that
-  implements them.
+  implements them. The exception is `provider.Provider` and `provider.Writer`,
+  which live in `internal/provider` because several consumers and every provider
+  share them. See [decision 0017](decisions/0017-provider-interfaces-live-in-the-provider-package.md).
 - Packages are small and named for what they own. No `utils`, `common`, or `helpers`.
 - One responsibility per file.
 - Abstract on the third use, not the second.
@@ -39,7 +41,8 @@ tools cannot.
 - `context.Context` is the first parameter of anything that does I/O.
 - Wrap with `%w`; provider errors wrap the sentinel kinds `NotFound`, `Denied`,
   `Unavailable`, `Invalid`.
-- No `panic` outside `main`.
+- No `panic` outside `cmd/` and `internal/cli`; `make lint` enforces it, with
+  `os.Stdout`, `os.Stderr`, `init()` and a non-first `context.Context`.
 - Log with `log/slog` to stderr. Stdout belongs to the child process.
 
 ## Tests
