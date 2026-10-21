@@ -60,7 +60,9 @@ Architectural decisions live in [docs/decisions](docs/decisions/index.md).
   edit the old record, except to set its Status line to `Superseded by NNNN`.
 - Add the new record to `docs/decisions/index.md`. `make check` fails if you do
   not.
-- Use the next free number and the same format as the existing records.
+- Use the next free number and the same format as the existing records. If
+  another branch merges a record with the same number first, renumber yours
+  before merging. `make check` fails on duplicate numbers.
 
 ## Security
 

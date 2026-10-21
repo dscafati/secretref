@@ -16,3 +16,4 @@ Each record explains one architectural decision. Accepted records are never edit
 | 0010 | [Apache-2.0 license](0010-apache-2-license.md) | Accepted |
 | 0011 | [No telemetry](0011-no-telemetry.md) | Accepted |
 | 0012 | [No AI co-author trailers](0012-no-ai-co-author-trailers.md) | Accepted |
+| 0013 | [Sequential decision numbers](0013-sequential-decision-numbers.md) | Accepted |
