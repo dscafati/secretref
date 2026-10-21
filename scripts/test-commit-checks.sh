@@ -55,12 +55,38 @@ expect 1 'command: --trailer =' cmdcheck 'git commit -m x --trailer "Co-authored
 expect 1 'command: --trailer session' cmdcheck 'git commit -m x --trailer "Claude-Session=https://x"'
 expect 0 'command: plain' cmdcheck 'git commit -m "fix: y"'
 
+# The guard reads its JSON input with jq when jq is on PATH and with sed
+# otherwise. Every guard case runs through both paths. The sed path runs with a
+# PATH that holds only the tools the scripts use, so jq cannot be found. A
+# missing jq is reported, and fails the run in CI, so the jq path is never
+# skipped silently.
+nojq="$tmp/nojq-bin"
+mkdir "$nojq"
+for t in sh cat dirname sed grep head; do
+  p=$(command -v "$t") || { echo "FAIL: $t not found" >&2; exit 1; }
+  ln -s "$p" "$nojq/$t"
+done
+if command -v jq >/dev/null 2>&1; then
+  have_jq=1
+else
+  have_jq=0
+  echo "commit checks: jq not installed; the guard's jq path is not tested" >&2
+  [ -z "${CI:-}" ] || fail=1
+fi
+
+# json COMMAND prints {"tool_input":{"command":COMMAND}} without using jq.
+json() {
+  esc=$(printf '%s' "$1" | awk 'BEGIN { ORS = "" } { gsub(/\\/, "\\\\"); gsub(/"/, "\\\""); if (NR > 1) print "\\n"; print }')
+  printf '{"tool_input":{"command":"%s"}}' "$esc"
+}
+
 # guard NAME WANT COMMAND
 guard() {
-  command -v jq >/dev/null 2>&1 || return 0 # the test builds its JSON with jq
-  name=$1 want=$2 command=$3
-  json=$(jq -n --arg c "$command" '{tool_input:{command:$c}}')
-  expect "$want" "guard: $name" sh -c "printf '%s' \"\$1\" | CLAUDE_PROJECT_DIR='$root' sh '$guard'" _ "$json"
+  name=$1 want=$2 input=$(json "$3")
+  expect "$want" "guard (sed): $name" sh -c "printf '%s' \"\$1\" | PATH='$nojq' CLAUDE_PROJECT_DIR='$root' sh '$guard'" _ "$input"
+  if [ "$have_jq" = 1 ]; then
+    expect "$want" "guard (jq): $name" sh -c "printf '%s' \"\$1\" | CLAUDE_PROJECT_DIR='$root' sh '$guard'" _ "$input"
+  fi
 }
 guard 'plain commit' 0 'git commit -m "fix: y"'
 guard '--no-verify' 2 'git commit --no-verify -m x'
