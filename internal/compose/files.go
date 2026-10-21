@@ -1,6 +1,7 @@
 package compose
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -170,9 +171,12 @@ type composeDoc struct {
 
 // matchServices returns, per service, the sorted keys of every loaded env
 // file the service lists in env_file.
-func matchServices(files []string, dir string, keysByFile map[string][]string) (map[string][]string, error) {
+func matchServices(ctx context.Context, files []string, dir string, keysByFile map[string][]string) (map[string][]string, error) {
 	sets := map[string]map[string]bool{}
 	for _, f := range files {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		data, err := os.ReadFile(f) //nolint:gosec // G304: a compose file the user's command names.
 		if err != nil {
 			return nil, fmt.Errorf("compose file: %w", err)

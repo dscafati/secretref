@@ -1,6 +1,8 @@
 package compose_test
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -72,12 +74,20 @@ func useTempDir(t *testing.T) string {
 	return tmp
 }
 
-// prepare runs Prepare and returns the plan and the override path ("" if
-// none was written).
+// prepare runs Prepare with environ as both the parent and the child
+// environment, and returns the plan and the override path ("" if none was
+// written).
 func prepare(t *testing.T, argv, environ []string, keys map[string][]string, cwd string) (compose.Plan, string) {
 	t.Helper()
+	return prepareInput(t, compose.Input{Argv: argv, Environ: environ, Parent: environ, Keys: keys, Cwd: cwd})
+}
+
+// prepareInput runs Prepare on in and returns the plan and the override path
+// ("" if none was written).
+func prepareInput(t *testing.T, in compose.Input) (compose.Plan, string) {
+	t.Helper()
 	tmp := useTempDir(t)
-	plan, err := compose.Prepare(argv, environ, keys, cwd)
+	plan, err := compose.Prepare(context.Background(), in)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
@@ -327,7 +337,10 @@ func TestNoMatchingServiceLeavesPlanUnchanged(t *testing.T) {
 	dir := project(t, map[string]string{"compose.yaml": simpleCompose})
 	argv := []string{"docker", "compose", "up"}
 	environ := []string{"A=" + canary}
-	plan, err := compose.Prepare(argv, environ, map[string][]string{filepath.Join(dir, "other.env"): {"A"}}, dir)
+	plan, err := compose.Prepare(context.Background(), compose.Input{
+		Argv: argv, Environ: environ, Parent: environ,
+		Keys: map[string][]string{filepath.Join(dir, "other.env"): {"A"}}, Cwd: dir,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -362,9 +375,25 @@ func TestNoComposeFile(t *testing.T) {
 
 func TestMissingFlagFileIsAnError(t *testing.T) {
 	dir := t.TempDir()
-	_, err := compose.Prepare([]string{"docker", "compose", "-f", "nope.yaml", "up"}, nil,
-		map[string][]string{filepath.Join(dir, ".env"): {"A"}}, dir)
+	_, err := compose.Prepare(context.Background(), compose.Input{
+		Argv: []string{"docker", "compose", "-f", "nope.yaml", "up"},
+		Keys: map[string][]string{filepath.Join(dir, ".env"): {"A"}}, Cwd: dir,
+	})
 	if err == nil {
 		t.Fatal("want error")
+	}
+}
+
+func TestPrepareStopsOnCanceledContext(t *testing.T) {
+	useTempDir(t)
+	dir := project(t, map[string]string{"compose.yaml": simpleCompose})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := compose.Prepare(ctx, compose.Input{
+		Argv: []string{"docker", "compose", "up"},
+		Keys: map[string][]string{filepath.Join(dir, ".env"): {"A"}}, Cwd: dir,
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Prepare error = %v, want context.Canceled", err)
 	}
 }

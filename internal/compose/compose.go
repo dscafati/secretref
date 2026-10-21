@@ -1,6 +1,7 @@
 package compose
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -73,14 +74,29 @@ type Plan struct {
 	Override string
 }
 
-// Prepare builds the Plan for argv. keysByFile maps each env file secretref
-// loaded to the keys it injects; environ is the child environment. Services
-// whose env_file names one of those files get an override that sets each key
-// to ${KEY}, so compose reads the value from its own environment.
+// Input is what Prepare reads.
+type Input struct {
+	// Argv is the command line, starting with docker.
+	Argv []string
+	// Environ is the environment the child gets.
+	Environ []string
+	// Parent is the environment secretref itself started with.
+	Parent []string
+	// Keys maps each env file secretref loaded to the keys it passes to the
+	// services that list that file in env_file.
+	Keys map[string][]string
+	// Cwd is the working directory.
+	Cwd string
+}
+
+// Prepare builds the Plan for in.Argv. Services whose env_file names a file
+// in in.Keys get an override that sets each of its keys to ${KEY}, so compose
+// reads the value from its own environment.
 //
-// When no service matches, the Plan carries argv and environ unchanged and no
-// file is written.
-func Prepare(argv, environ []string, keysByFile map[string][]string, cwd string) (Plan, error) {
+// When no service matches, the Plan carries in.Argv and in.Environ unchanged
+// and no file is written.
+func Prepare(ctx context.Context, in Input) (Plan, error) {
+	argv, environ, cwd := in.Argv, in.Environ, in.Cwd
 	unchanged := Plan{Args: argv, Env: environ, Cleanup: func() error { return nil }}
 	inv := parseArgs(argv)
 	files, err := composeFiles(inv, environ, cwd)
@@ -90,7 +106,7 @@ func Prepare(argv, environ []string, keysByFile map[string][]string, cwd string)
 	if len(files) == 0 {
 		return unchanged, nil
 	}
-	services, err := matchServices(files, projectDir(inv, files, cwd), absKeys(keysByFile, cwd))
+	services, err := matchServices(ctx, files, projectDir(inv, files, cwd), absKeys(in.Keys, cwd))
 	if err != nil {
 		return Plan{}, err
 	}
