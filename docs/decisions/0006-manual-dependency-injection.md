@@ -1,6 +1,6 @@
 # 0006. Manual dependency injection
 
-Status: Accepted
+Status: Superseded by 0015
 
 Date: 2026-10-20
 

@@ -9,7 +9,7 @@ A new provider changes the product surface, so it needs a decision before code.
 
 1. Read `AGENTS.md` (invariants, rules) and `docs/style.md`. Check `docs/decisions/index.md`:
    if the scheme is not covered by an accepted ADR, write a new ADR first, following the
-   format and numbering in that directory, and update the index.
+   format and numbering in that directory, and run `make docs` to regenerate the index.
 2. Read the `Provider` and `Writer` interfaces and the error kinds in `internal/provider`,
    and the reference grammar in `internal/ref`. Use an existing provider package under
    `internal/provider/` as the model for layout.
@@ -23,5 +23,11 @@ A new provider changes the product surface, so it needs a decision before code.
    `AGENTS.md`.
 6. Wire it in `cmd/secretref/main.go` only.
 7. Add an acceptance case (see `write-acceptance-test`) using the canary rule.
-8. Run `make docs` to regenerate reference docs, update the README reference table, then
-   run `make check`.
+8. Register the scheme everywhere it is listed:
+   - the scheme list in `internal/ref`,
+   - the provider registry in `cmd/secretref/main.go`,
+   - the fake-provider scheme list in `cmd/secretref/fake_acceptance.go`,
+   - the providers table in `README.md` (reference syntax, options, credentials),
+   - the "Providers and authentication" section of `docs/guide.md`,
+   - the provider dropdown in `.github/ISSUE_TEMPLATE/bug.yml`.
+9. Run `make docs` to regenerate reference docs, then run `make check`.

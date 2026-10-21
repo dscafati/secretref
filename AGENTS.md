@@ -15,7 +15,8 @@ Run `make` from the repository root. The Makefile is the source of truth for tar
 | `make test` | Unit tests with `-race`. |
 | `make test-acceptance` | Real binary through testscript against `provider/fake`. |
 | `make fuzz` | Parser fuzz targets; `FUZZTIME` sets the duration. |
-| `make test-integration` | Providers against LocalStack and a GCP fake; `CONTAINER` selects podman or docker. |
+| `make test-integration` | `aws-sm` against a Secrets Manager emulator container, and the keyring contract against the real OS keyring; `CONTAINER` selects podman or docker. `gcp-sm` has no integration test; its unit tests use an httptest fake. |
+| `make build-all` | `CGO_ENABLED=0` build for linux, darwin, windows on amd64 and arm64. CI runs it. |
 | `make docs` | Regenerate `docs/reference/` from cobra and `docs/decisions/index.md` from the records. |
 | `make snapshot` | GoReleaser snapshot build for all targets. |
 
@@ -32,7 +33,9 @@ Never install tools globally and never edit tool versions anywhere else.
 - Providers in v0.1: `aws-sm`, `gcp-sm`, `keyring`. Nothing else.
 - `CGO_ENABLED=0` must build for linux, darwin, windows on amd64 and arm64.
 - Stdout belongs to the child process. Diagnostics go to stderr through `log/slog`.
-- No package-level variables except `build.Version`. Dependencies are passed to constructors.
+- No mutable package-level state. The only package-level variables are `build.Version`,
+  sentinel errors from `errors.New`, and compiled regexps from `regexp.MustCompile`; nothing
+  reassigns them (ADR 0015). Dependencies are passed to constructors.
 
 ## Rules
 

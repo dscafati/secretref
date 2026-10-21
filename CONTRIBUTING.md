@@ -4,14 +4,33 @@ Thanks for helping. Read this page before you open a pull request.
 
 ## Setup
 
-You need Go 1.26. Dev tools run through `go tool -modfile=tools/go.mod`, so you
-install nothing globally.
+You need:
+
+- Go 1.26 or later (the version in `go.mod`),
+- `make`,
+- a POSIX shell.
+
+On Windows, use Git Bash and install `make`. The repository contains a
+symlink, `.claude/skills`. Turn on Developer Mode and enable symlinks in git
+before you clone:
+
+```sh
+git config --global core.symlinks true
+```
+
+Dev tools run through `go tool -modfile=tools/go.mod`, so you install nothing
+globally.
 
 ```sh
 git clone https://github.com/dscafati/secretref
 cd secretref
+go tool -modfile=tools/go.mod lefthook install
 make check
 ```
+
+`lefthook install` sets up the git hooks. Before each commit they format staged
+Go files and scan staged changes for secrets. Before each push they run the
+linter.
 
 `make check` runs formatting, lint, `go mod tidy` checks, unit tests,
 acceptance tests, the generated-docs check, the decision-index check, and the
@@ -29,16 +48,23 @@ push.
 | Acceptance tests with the real binary | `make test-acceptance` |
 | Fuzz the parsers | `make fuzz` |
 | Integration tests | `make test-integration` |
+| Build every release target with `CGO_ENABLED=0` | `make build-all` |
 | Regenerate reference docs | `make docs` |
 | Build release binaries locally | `make snapshot` |
 
-Integration tests start LocalStack and other containers. Podman works:
+Integration tests start a Secrets Manager emulator container for `aws-sm` and
+run the provider contract tests against the real OS keyring. `CONTAINER`
+selects the container runtime, podman or docker:
 
 ```sh
-make test-integration CONTAINER=podman
+make test-integration CONTAINER=docker
 ```
 
-Integration tests never use real cloud accounts. A maintainer runs those by hand.
+`gcp-sm` has no integration test. Its unit tests run against a fake HTTP
+server. Tests never use real cloud accounts. A maintainer runs those by hand.
+
+`make build-all` builds linux, darwin, and windows on amd64 and arm64 with
+`CGO_ENABLED=0`. CI runs it too.
 
 New behavior needs a test first. Tests that touch secrets use a canary value
 and fail if it appears anywhere except the child environment.
@@ -52,6 +78,13 @@ and fail if it appears anywhere except the child environment.
 - Open an issue first for anything larger than a small fix. Only work on issues
   labeled `help wanted`, unless a maintainer says otherwise in the issue.
 
+## Stability
+
+Before 1.0, a minor release may contain breaking changes. The annotation
+syntax, the reference grammar, and the exit codes are the exception. A change
+to any of them needs a new decision record and a callout in the release notes.
+See the [README](README.md#stability).
+
 ## Decision records
 
 Architectural decisions live in [docs/decisions](docs/decisions/index.md).
@@ -63,6 +96,10 @@ Architectural decisions live in [docs/decisions](docs/decisions/index.md).
 - Use the next free number and the same format as the existing records. If
   another branch merges a record with the same number first, renumber yours
   before merging. `make check` fails on duplicate numbers.
+
+## Releases
+
+Maintainers cut releases. See [docs/releasing.md](docs/releasing.md).
 
 ## Security
 
