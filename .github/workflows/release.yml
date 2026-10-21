@@ -67,7 +67,23 @@ jobs:
       attestations: write
     env:
       DRY_RUN: "false"
+      # Homebrew, Scoop and winget are published by hand for now
+      # (docs/releasing.md). Set to "true" to let GoReleaser push them; that
+      # needs TAP_GITHUB_TOKEN in the release environment.
+      PUBLISH_PACKAGE_MANAGERS: "false"
     steps:
+      # Without the token GoReleaser falls back to GITHUB_TOKEN, which cannot
+      # push to other repositories, and fails after the GitHub release is
+      # already public. Stop here instead, before anything is published.
+      - name: Check tap token
+        if: env.PUBLISH_PACKAGE_MANAGERS == 'true'
+        env:
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          if [ -z "$TAP_GITHUB_TOKEN" ]; then
+            echo "::error::PUBLISH_PACKAGE_MANAGERS is true but the release environment has no TAP_GITHUB_TOKEN secret"
+            exit 1
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -106,5 +122,16 @@ jobs:
             dist/*.sbom.json
             dist/secretref_*/secretref
             dist/secretref_*/secretref.exe
+      # For publishing to Homebrew, Scoop and winget by hand (docs/releasing.md).
+      - name: Upload package-manager manifests
+        if: env.PUBLISH_PACKAGE_MANAGERS != 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: package-manager-manifests
+          path: |
+            dist/homebrew/
+            dist/scoop/
+            dist/winget/
+          if-no-files-found: error
       - name: Publish npm packages
         run: scripts/npm-publish.sh

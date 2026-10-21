@@ -9,18 +9,43 @@ This page is for maintainers. Pushing a `v*` tag runs the `release` job of
 2. Runs GoReleaser (`.goreleaser.yaml`). GoReleaser builds the six
    `CGO_ENABLED=0` binaries, archives, `.deb` and `.rpm` packages, checksums, a
    cosign signature for the checksums, and SBOMs. It publishes the GitHub
-   release, pushes the Homebrew cask to `dscafati/homebrew-tap` and the Scoop
-   manifest to `dscafati/scoop-bucket`, and opens a pull request on
-   `microsoft/winget-pkgs` from the `dscafati/winget-pkgs` fork.
+   release. It also writes the Homebrew cask, the Scoop manifest, and the
+   winget manifests to `dist/`, but does not publish them (see
+   [Homebrew, Scoop, and winget](#homebrew-scoop-and-winget)).
 3. Attests build provenance for the archives, packages, checksums, SBOMs, and
    the raw binaries.
-4. Publishes `@secretref/<os>-<cpu>` for each binary, then the `secretref`
+4. Uploads the Homebrew, Scoop, and winget manifests as the
+   `package-manager-manifests` workflow artifact.
+5. Publishes `@secretref/<os>-<cpu>` for each binary, then the `secretref`
    launcher, with npm trusted publishing (`scripts/npm-publish.sh`).
 
 Prerelease tags such as `v0.1.0-rc.1` are marked as prereleases on GitHub and
-go to npm under the `next` dist-tag. They skip the Homebrew, Scoop, and winget
-uploads (`skip_upload: auto`); GoReleaser writes those manifests to `dist/`
-only.
+go to npm under the `next` dist-tag.
+
+## Homebrew, Scoop, and winget
+
+Publishing to Homebrew, Scoop, and winget is a manual step for now. The
+`release` job sets `PUBLISH_PACKAGE_MANAGERS: "false"`, and every `skip_upload`
+in `.goreleaser.yaml` reads it, so GoReleaser pushes nothing to the tap, the
+bucket, or `microsoft/winget-pkgs`.
+
+To publish a stable release by hand:
+
+1. Download the manifests from the tag's release run:
+   `gh run download <run-id> -n package-manager-manifests`.
+2. Commit `homebrew/Casks/secretref.rb` to `Casks/` in `dscafati/homebrew-tap`.
+3. Commit `scoop/secretref.json` to the root of `dscafati/scoop-bucket`.
+4. Open a pull request on `microsoft/winget-pkgs` with the files under
+   `winget/`, at the path they are written to.
+
+To let the release job publish them instead, complete the
+[package-manager repositories](#package-manager-repositories) and
+[`TAP_GITHUB_TOKEN`](#tap_github_token) setup below, then set
+`PUBLISH_PACKAGE_MANAGERS` to `"true"` in `release.yml`. With the switch on and
+no token, the job's first step fails before anything is published. GoReleaser
+would otherwise fall back to `GITHUB_TOKEN` and fail only after the GitHub
+release is public. Prerelease tags never publish to the three
+(`skip_upload: auto`).
 
 ## One-time setup
 
@@ -41,8 +66,9 @@ Do these once, in this order, before the first tag.
 
 ### Package-manager repositories
 
-These must exist before the first stable release, or GoReleaser fails after
-the GitHub release is already published.
+Only needed with `PUBLISH_PACKAGE_MANAGERS: "true"`. The repositories must
+exist before the first stable release that publishes to them, or GoReleaser
+fails after the GitHub release is already published.
 
 - `dscafati/homebrew-tap`: a public repository with at least one commit on the
   default branch. GoReleaser writes `Casks/secretref.rb`.
@@ -53,7 +79,7 @@ the GitHub release is already published.
 
 ### `TAP_GITHUB_TOKEN`
 
-Add it as a secret of the `release` environment, not the repository, so only
+Only needed with `PUBLISH_PACKAGE_MANAGERS: "true"`. Add it as a secret of the `release` environment, not the repository, so only
 the release job can read it. One token covers all three repositories above.
 
 Use a classic personal access token with the `public_repo` scope. A
@@ -190,8 +216,9 @@ without signing or SBOMs, because those need cosign and syft on `PATH`.
      `checksums.txt.sigstore.json`, and the SBOMs.
    - `npm view secretref dist-tags` shows the new version under `latest`, or
      under `next` for a prerelease.
-   - Stable releases only: the tap and bucket have a new commit, and the winget
-     pull request is open. A winget maintainer reviews and merges it.
+   - Stable releases only: the run has the `package-manager-manifests`
+     artifact. Publish it by hand
+     ([Homebrew, Scoop, and winget](#homebrew-scoop-and-winget)).
 
 ## When something fails
 

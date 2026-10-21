@@ -94,8 +94,9 @@ homebrew_casks:
       token: "{{ .Env.TAP_GITHUB_TOKEN }}"
     homepage: https://github.com/dscafati/secretref
     description: Resolve secrets from vaults using reference comments in .env files
+    # Published by hand until PUBLISH_PACKAGE_MANAGERS is "true" (release.yml).
     # Prerelease tags (v0.1.0-rc.1) leave the cask in dist/ and push nothing.
-    skip_upload: auto
+    skip_upload: '{{ if eq (index .Env "PUBLISH_PACKAGE_MANAGERS") "true" }}auto{{ else }}true{{ end }}'
     binaries:
       - secretref
     manpages:
@@ -115,8 +116,9 @@ homebrew_casks:
 
 scoops:
   - name: secretref
+    # Published by hand until PUBLISH_PACKAGE_MANAGERS is "true" (release.yml).
     # Prerelease tags leave the manifest in dist/ and push nothing.
-    skip_upload: auto
+    skip_upload: '{{ if eq (index .Env "PUBLISH_PACKAGE_MANAGERS") "true" }}auto{{ else }}true{{ end }}'
     repository:
       owner: dscafati
       name: scoop-bucket
@@ -148,9 +150,10 @@ winget:
   - name: secretref
     publisher: dscafati
     package_identifier: dscafati.secretref
+    # Published by hand until PUBLISH_PACKAGE_MANAGERS is "true" (release.yml).
     # Prerelease tags leave the manifests in dist/ and open no pull request on
     # microsoft/winget-pkgs.
-    skip_upload: auto
+    skip_upload: '{{ if eq (index .Env "PUBLISH_PACKAGE_MANAGERS") "true" }}auto{{ else }}true{{ end }}'
     short_description: Resolve secrets from vaults using reference comments in .env files
     license: Apache-2.0
     homepage: https://github.com/dscafati/secretref
