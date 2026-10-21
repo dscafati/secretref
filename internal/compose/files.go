@@ -334,11 +334,16 @@ func envValue(environ []string, key string) (string, bool) {
 
 // setEnv returns environ without any entry for key, plus key=value.
 func setEnv(environ []string, key, value string) []string {
+	return append(unsetEnv(environ, key), key+"="+value)
+}
+
+// unsetEnv returns environ without any entry for key.
+func unsetEnv(environ []string, key string) []string {
 	out := make([]string, 0, len(environ)+1)
 	for _, kv := range environ {
 		if k, _, _ := strings.Cut(kv, "="); !sameKey(k, key) {
 			out = append(out, kv)
 		}
 	}
-	return append(out, key+"="+value)
+	return out
 }

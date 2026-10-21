@@ -406,11 +406,12 @@ func TestComposeSettingsComeFromParentOnly(t *testing.T) {
 	sep := string(os.PathListSeparator)
 	keys := map[string][]string{filepath.Join(dir, ".env"): {"A"}}
 	plan, path := prepareInput(t, compose.Input{
-		Argv:    []string{"docker", "compose", "up"},
-		Environ: []string{"PATH=/bin", "COMPOSE_FILE=x" + canary, "COMPOSE_PATH_SEPARATOR=,"},
-		Parent:  []string{"PATH=/bin"},
-		Keys:    keys,
-		Cwd:     dir,
+		Argv:     []string{"docker", "compose", "up"},
+		Environ:  []string{"PATH=/bin", "COMPOSE_FILE=x" + canary, "COMPOSE_PATH_SEPARATOR=,"},
+		Parent:   []string{"PATH=/bin"},
+		Keys:     keys,
+		FileKeys: []string{"A", "COMPOSE_FILE", "COMPOSE_PATH_SEPARATOR"},
+		Cwd:      dir,
 	})
 	if path == "" {
 		t.Fatal("no override written")
@@ -533,5 +534,137 @@ func TestKeysComposeCannotSubstituteAreSkipped(t *testing.T) {
 	}
 	if !plan.Matched || len(plan.Warnings) != 1 {
 		t.Errorf("Matched = %v, Warnings = %q", plan.Matched, plan.Warnings)
+	}
+}
+
+// countEnv returns how many entries of env set key.
+func countEnv(env []string, key string) int {
+	n := 0
+	for _, kv := range env {
+		if k, _, _ := strings.Cut(kv, "="); k == key {
+			n++
+		}
+	}
+	return n
+}
+
+func warnsAbout(warnings []string, name string) bool {
+	return slices.ContainsFunc(warnings, func(w string) bool { return strings.Contains(w, name) })
+}
+
+func TestFileComposeFileIsReplacedWithAWarning(t *testing.T) {
+	// A plain COMPOSE_FILE in an env file never reaches the child by default,
+	// but compose would read it from .env itself. secretref sets COMPOSE_FILE
+	// to the files it chose and says so.
+	dir := project(t, map[string]string{"compose.yaml": simpleCompose, "compose.dev.yaml": "services: {}\n"})
+	sep := string(os.PathListSeparator)
+	plan, path := prepareInput(t, compose.Input{
+		Argv:     []string{"docker", "compose", "up"},
+		Environ:  []string{"PATH=/bin", "A=" + canary},
+		Parent:   []string{"PATH=/bin"},
+		Keys:     map[string][]string{filepath.Join(dir, ".env"): {"A"}},
+		FileKeys: []string{"COMPOSE_FILE", "A"},
+		Cwd:      dir,
+	})
+	if path == "" {
+		t.Fatal("no override written")
+	}
+	got, _ := envGet(plan.Env, "COMPOSE_FILE")
+	if want := filepath.Join(dir, "compose.yaml") + sep + path; got != want {
+		t.Errorf("COMPOSE_FILE = %q, want %q", got, want)
+	}
+	if !warnsAbout(plan.Warnings, "COMPOSE_FILE") {
+		t.Errorf("Warnings = %q, want one naming COMPOSE_FILE", plan.Warnings)
+	}
+}
+
+func TestFileComposeFileWithoutOverride(t *testing.T) {
+	// With no override, a COMPOSE_FILE from an env file, here built from a
+	// secret, must not reach compose either: secretref pins the files it
+	// chose, or drops the variable when it found none.
+	sep := string(os.PathListSeparator)
+	environ := []string{"PATH=/bin", "COMPOSE_FILE=x" + canary, "COMPOSE_PATH_SEPARATOR=,"}
+	fileKeys := []string{"COMPOSE_FILE", "COMPOSE_PATH_SEPARATOR"}
+	keys := map[string][]string{"/elsewhere/.env": {"A"}}
+
+	dir := project(t, map[string]string{"compose.yaml": simpleCompose})
+	plan, path := prepareInput(t, compose.Input{
+		Argv: []string{"docker", "compose", "up"}, Environ: environ, Parent: []string{"PATH=/bin"},
+		Keys: keys, FileKeys: fileKeys, Cwd: dir,
+	})
+	if path != "" {
+		t.Fatalf("override written: %s", path)
+	}
+	if got, _ := envGet(plan.Env, "COMPOSE_FILE"); got != filepath.Join(dir, "compose.yaml") {
+		t.Errorf("COMPOSE_FILE = %q, want the compose file secretref found", got)
+	}
+	if got, _ := envGet(plan.Env, "COMPOSE_PATH_SEPARATOR"); got != sep {
+		t.Errorf("COMPOSE_PATH_SEPARATOR = %q, want %q", got, sep)
+	}
+	if n := countEnv(plan.Env, "COMPOSE_FILE"); n != 1 {
+		t.Errorf("COMPOSE_FILE set %d times", n)
+	}
+	if !warnsAbout(plan.Warnings, "COMPOSE_FILE") {
+		t.Errorf("Warnings = %q, want one naming COMPOSE_FILE", plan.Warnings)
+	}
+
+	empty := t.TempDir()
+	plan, _ = prepareInput(t, compose.Input{
+		Argv: []string{"docker", "compose", "up"}, Environ: environ, Parent: []string{"PATH=/bin"},
+		Keys: keys, FileKeys: fileKeys, Cwd: empty,
+	})
+	for _, k := range fileKeys {
+		if v, ok := envGet(plan.Env, k); ok {
+			t.Errorf("%s = %q, want it removed", k, v)
+		}
+	}
+	if !warnsAbout(plan.Warnings, "COMPOSE_FILE") {
+		t.Errorf("Warnings = %q, want one naming COMPOSE_FILE", plan.Warnings)
+	}
+}
+
+func TestFileComposeFileWithFileFlags(t *testing.T) {
+	// With -f compose ignores COMPOSE_FILE; secretref still drops the file
+	// values and has nothing to warn about.
+	dir := project(t, map[string]string{"one.yaml": simpleCompose})
+	environ := []string{"COMPOSE_FILE=x" + canary, "COMPOSE_PATH_SEPARATOR=,"}
+	plan, _ := prepareInput(t, compose.Input{
+		Argv: []string{"docker", "compose", "-f", "one.yaml", "up"}, Environ: environ,
+		Keys:     map[string][]string{filepath.Join(dir, ".env"): {"A"}},
+		FileKeys: []string{"COMPOSE_FILE", "COMPOSE_PATH_SEPARATOR"}, Cwd: dir,
+	})
+	for _, k := range []string{"COMPOSE_FILE", "COMPOSE_PATH_SEPARATOR"} {
+		if v, ok := envGet(plan.Env, k); ok {
+			t.Errorf("%s = %q, want it removed", k, v)
+		}
+	}
+	if len(plan.Warnings) != 0 {
+		t.Errorf("Warnings = %q, want none", plan.Warnings)
+	}
+}
+
+func TestParentComposeFileWinsSilently(t *testing.T) {
+	// The environment wins over the file as for any variable; no warning.
+	dir := project(t, map[string]string{"compose.yaml": simpleCompose})
+	env := []string{"COMPOSE_FILE=compose.yaml"}
+	plan, path := prepareInput(t, compose.Input{
+		Argv: []string{"docker", "compose", "up"}, Environ: env, Parent: env,
+		Keys:     map[string][]string{filepath.Join(dir, ".env"): {"A"}},
+		FileKeys: []string{"COMPOSE_FILE"}, Cwd: dir,
+	})
+	if got, _ := envGet(plan.Env, "COMPOSE_FILE"); got != "compose.yaml"+string(os.PathListSeparator)+path {
+		t.Errorf("COMPOSE_FILE = %q", got)
+	}
+	if len(plan.Warnings) != 0 {
+		t.Errorf("Warnings = %q, want none", plan.Warnings)
+	}
+}
+
+func TestComposeVariablesStayOutOfServices(t *testing.T) {
+	dir := project(t, map[string]string{"compose.yaml": simpleCompose})
+	keys := map[string][]string{filepath.Join(dir, ".env"): {"A", "COMPOSE_FILE", "COMPOSE_PROJECT_NAME"}}
+	_, path := prepare(t, []string{"docker", "compose", "up"}, nil, keys, dir)
+	if diff := cmp.Diff(map[string][]string{"web": {"A"}}, readServices(t, path)); diff != "" {
+		t.Errorf("override services (-want +got):\n%s", diff)
 	}
 }

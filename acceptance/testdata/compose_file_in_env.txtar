@@ -1,0 +1,23 @@
+# (a) A plain COMPOSE_FILE in .env is not injected by default, and compose
+# would read it from .env itself. When secretref writes an override it sets
+# COMPOSE_FILE to the files it found plus the override, and warns by name.
+exec secretref run -- docker compose -show-compose DB_PASSWORD COMPOSE_FILE
+stdout 'DB_PASSWORD: \$\{DB_PASSWORD\}'
+! stdout 'COMPOSE_FILE'
+stderr '^secretref: compose: warning: ignoring COMPOSE_FILE from an env file; set it in the environment or pass -f$'
+grep '^DB_PASSWORD=SR_CANARY_7f3a9c$' child-env.txt
+! grep 'compose.dev.yaml' child-env.txt
+no-canary
+no-override
+
+-- .env --
+COMPOSE_FILE=compose.yaml:compose.dev.yaml
+# secretref: keyring://app/db_password
+DB_PASSWORD=localdev
+-- compose.yaml --
+services:
+  web:
+    image: alpine
+    env_file: .env
+-- compose.dev.yaml --
+services: {}

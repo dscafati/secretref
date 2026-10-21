@@ -108,7 +108,8 @@ func runRun(ctx context.Context, d Deps, o runOptions, dash int, argv []string) 
 	env := res.Environ(d.Environ(), o.all)
 	if compose.Detect(argv) {
 		return runCompose(ctx, d, compose.Input{
-			Argv: argv, Environ: env, Parent: d.Environ(), Keys: keysByFile(res, o.all), Cwd: cwd,
+			Argv: argv, Environ: env, Parent: d.Environ(), Keys: keysByFile(res, o.all),
+			FileKeys: entryKeys(entries), Cwd: cwd,
 		})
 	}
 	if runtime.GOOS == "windows" {
@@ -233,6 +234,16 @@ func keysByFile(res resolve.Result, all bool) map[string][]string {
 		}
 	}
 	return out
+}
+
+// entryKeys returns the key of every entry, for compose to tell which
+// settings came from a file. Values stay out.
+func entryKeys(entries []envfile.Entry) []string {
+	keys := make([]string, len(entries))
+	for i, e := range entries {
+		keys[i] = e.Key
+	}
+	return keys
 }
 
 // failureLine renders a failed key as "<key>  <ref>  <kind>[: <reason>]".

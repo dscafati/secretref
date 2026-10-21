@@ -96,6 +96,10 @@ type Input struct {
 	// Keys maps each env file secretref loaded to the keys it passes to the
 	// services that list that file in env_file.
 	Keys map[string][]string
+	// FileKeys names every key defined in the loaded env files. Prepare uses
+	// the names only, to tell whether COMPOSE_FILE or COMPOSE_PATH_SEPARATOR
+	// came from a file.
+	FileKeys []string
 	// Cwd is the working directory.
 	Cwd string
 }
@@ -104,21 +108,53 @@ type Input struct {
 // in in.Keys get an override that sets each of its keys to ${KEY}, so compose
 // reads the value from its own environment.
 //
-// When no service matches, the Plan carries in.Argv and in.Environ unchanged
-// and no file is written.
+// When no service matches, no file is written and the Plan carries in.Argv
+// and in.Environ, apart from the COMPOSE_FILE handling below.
+//
+// SECURITY: COMPOSE_FILE and COMPOSE_PATH_SEPARATOR from an env file can be
+// built from a secret, and compose prints a COMPOSE_FILE it cannot open.
+// Prepare never reads their file values, removes them from compose's
+// environment, and, without -f, sets COMPOSE_FILE to the files secretref
+// chose so compose does not read the value from .env itself.
 func Prepare(ctx context.Context, in Input) (Plan, error) {
-	argv, environ, parent, cwd := in.Argv, in.Environ, in.Parent, in.Cwd
+	argv, parent, cwd := in.Argv, in.Parent, in.Cwd
 	inv := parseArgs(argv)
-	var warnings []string
-	if _, inParent := envValue(parent, composeFileVar); !inParent && inv.lastFileEnd == 0 {
-		if _, inChild := envValue(environ, composeFileVar); inChild {
-			warnings = append(warnings, "ignoring "+composeFileVar+" from an env file; set it in the environment or pass -f")
+	environ := in.Environ
+	fromFile := map[string]bool{}
+	for _, k := range []string{composeFileVar, pathSeparatorVar} {
+		if _, inParent := envValue(parent, k); !inParent && slices.ContainsFunc(in.FileKeys, func(f string) bool { return sameKey(f, k) }) {
+			fromFile[k] = true
+			environ = unsetEnv(environ, k)
 		}
 	}
-	unchanged := Plan{Args: argv, Env: environ, Cleanup: func() error { return nil }, Warnings: warnings}
+	// pin sets COMPOSE_FILE to list, split the way secretref split it.
+	sep := pathSeparator(parent)
+	pin := func(env []string, list string) []string {
+		return setEnv(setEnv(env, composeFileVar, list), pathSeparatorVar, sep)
+	}
+	var warnings []string
+	pinFiles := fromFile[composeFileVar] && inv.lastFileEnd == 0
+	if pinFiles {
+		warnings = append(warnings, "ignoring "+composeFileVar+" from an env file; set it in the environment or pass -f")
+	}
+
 	files, err := composeFiles(inv, parent, cwd)
 	if err != nil {
 		return Plan{}, err
+	}
+	chosen := func() string {
+		if v, ok := envValue(parent, composeFileVar); ok && v != "" {
+			return v
+		}
+		paths := make([]string, len(files))
+		for i, f := range files {
+			paths[i] = f.path
+		}
+		return strings.Join(paths, sep)
+	}
+	unchanged := Plan{Args: argv, Env: environ, Cleanup: func() error { return nil }, Warnings: warnings}
+	if pinFiles && len(files) > 0 {
+		unchanged.Env = pin(environ, chosen())
 	}
 	if len(files) == 0 {
 		return unchanged, nil
@@ -149,19 +185,7 @@ func Prepare(ctx context.Context, in Input) (Plan, error) {
 		plan.Args = args
 		return plan, nil
 	}
-	// Compose reads both variables from its environment, and from the
-	// project's .env when they are unset there. Setting both makes compose
-	// split COMPOSE_FILE the way secretref built it.
-	sep := pathSeparator(parent)
-	orig, ok := envValue(parent, composeFileVar)
-	if !ok || orig == "" {
-		paths := make([]string, len(files))
-		for i, f := range files {
-			paths[i] = f.path
-		}
-		orig = strings.Join(paths, sep)
-	}
-	plan.Env = setEnv(setEnv(environ, composeFileVar, orig+sep+path), pathSeparatorVar, sep)
+	plan.Env = pin(environ, chosen()+sep+path)
 	return plan, nil
 }
 
@@ -174,6 +198,10 @@ func substitutable(services map[string][]string) (map[string][]string, []string)
 	for name, keys := range services {
 		var ok []string
 		for _, k := range keys {
+			if strings.HasPrefix(k, "COMPOSE_") {
+				// Compose's own settings, not service variables.
+				continue
+			}
 			if isComposeName(k) {
 				ok = append(ok, k)
 			} else if !slices.Contains(skipped, k) {
