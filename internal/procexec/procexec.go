@@ -47,7 +47,7 @@ func spawn(ctx context.Context, argv, env []string, forward func(*os.Process, os
 	cmd := exec.CommandContext(ctx, path)
 	cmd.Args = argv
 	cmd.Env = env
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr //nolint:forbidigo // the child inherits the process streams; this is the one place they are handed over
 
 	sigs := make(chan os.Signal, 4)
 	signal.Notify(sigs, caughtSignals()...)

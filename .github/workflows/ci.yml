@@ -26,8 +26,10 @@ jobs:
       run:
         shell: bash
     steps:
+      # Full history: adr-check compares the decision records with the base commit.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -37,6 +39,8 @@ jobs:
             go.sum
             tools/go.sum
       - name: Check
+        env:
+          ADR_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: make check
 
   build-all:
@@ -86,10 +90,46 @@ jobs:
           SECRETREF_REQUIRE_KEYRING: "1"
         run: make test-integration CONTAINER=docker
 
+  commit-trailers:
+    name: commit-trailers
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Same script as the lefthook commit-msg hook and the Claude Code hook.
+      - name: Reject AI co-author and session trailers
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then
+            range="$BASE..$HEAD"
+          elif [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            range="$AFTER^!"
+          else
+            range="$BEFORE..$AFTER"
+          fi
+          status=0
+          for sha in $(git rev-list "$range"); do
+            if ! git log -n 1 --format=%B "$sha" | sh scripts/check-commit-msg.sh - 2>/dev/null; then
+              echo "::error::Commit $sha has an AI co-author or Claude-Session trailer"
+              status=1
+            fi
+          done
+          exit "$status"
+
   ci-gate:
     name: ci-gate
     if: always()
-    needs: [check, build-all, integration]
+    needs: [check, build-all, integration, commit-trailers]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
@@ -99,6 +139,7 @@ jobs:
           CHECK_RESULT: ${{ needs.check.result }}
           BUILD_ALL_RESULT: ${{ needs.build-all.result }}
           INTEGRATION_RESULT: ${{ needs.integration.result }}
+          TRAILERS_RESULT: ${{ needs.commit-trailers.result }}
         run: |
-          echo "check=$CHECK_RESULT build-all=$BUILD_ALL_RESULT integration=$INTEGRATION_RESULT"
-          [ "$CHECK_RESULT" = "success" ] && [ "$BUILD_ALL_RESULT" = "success" ] && [ "$INTEGRATION_RESULT" = "success" ]
+          echo "check=$CHECK_RESULT build-all=$BUILD_ALL_RESULT integration=$INTEGRATION_RESULT commit-trailers=$TRAILERS_RESULT"
+          [ "$CHECK_RESULT" = "success" ] && [ "$BUILD_ALL_RESULT" = "success" ] && [ "$INTEGRATION_RESULT" = "success" ] && [ "$TRAILERS_RESULT" = "success" ]

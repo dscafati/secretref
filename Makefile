@@ -5,12 +5,16 @@ CONTAINER ?= podman
 FUZZTIME ?= 30s
 
 .DEFAULT_GOAL := check
-.PHONY: reveal-check check fix fmt-check lint tidy-check test test-acceptance fuzz test-integration build-all docs docs-check adr-index adr-check skills-check snapshot
+.PHONY: check hooks scripts-check doc-go-check reveal-check fix fmt-check lint tidy-check test test-acceptance fuzz test-integration build-all docs docs-check adr-index adr-check skills-check snapshot
 
 # Every release target. Keep in sync with builds[].goos/goarch in .goreleaser.yaml.
 BUILD_TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 
-check: fmt-check lint tidy-check test test-acceptance docs-check adr-check skills-check reveal-check
+check: fmt-check lint tidy-check test test-acceptance docs-check adr-check skills-check doc-go-check scripts-check reveal-check
+
+# Installs the git hooks from lefthook.yml. Run once per clone.
+hooks:
+	$(TOOL) lefthook install
 
 fmt-check:
 	@out=$$($(TOOL) gofumpt -l .); \
@@ -94,6 +98,14 @@ reveal-check:
 
 skills-check:
 	sh scripts/check-skills-link.sh
+
+# Every Go package has a doc.go.
+doc-go-check:
+	sh scripts/check-doc-go.sh
+
+# Tests the commit-message check and the Claude Code git guard.
+scripts-check:
+	sh scripts/test-commit-checks.sh
 
 # Local snapshot of every artifact and package-manager manifest. Signing and
 # SBOMs need cosign and syft on PATH, so they are skipped here; the release

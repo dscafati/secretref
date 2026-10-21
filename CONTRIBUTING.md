@@ -24,17 +24,19 @@ globally.
 ```sh
 git clone https://github.com/dscafati/secretref
 cd secretref
-go tool -modfile=tools/go.mod lefthook install
+make hooks
 make check
 ```
 
-`lefthook install` sets up the git hooks. Before each commit they format staged
-Go files and scan staged changes for secrets. Before each push they run the
-linter.
+`make hooks` installs the git hooks. Before each commit they format staged
+Go files and scan staged changes for secrets. They reject AI co-author and
+`Claude-Session` trailers in the commit message, and before each push they run
+the linter. CI runs the same trailer check (`scripts/check-commit-msg.sh`) on
+every pull request and every push to `main`.
 
 `make check` runs formatting, lint, `go mod tidy` checks, unit tests,
-acceptance tests, the generated-docs check, the decision-index check, and the
-skills-link check, and the Reveal-comment check. It does not run fuzz or integration tests. Run it before every
+acceptance tests, the generated-docs check, the decision checks, the skills-link check, the
+`doc.go` check, and the tests of the commit-message scripts, and the Reveal-comment check. It does not run fuzz or integration tests. Run it before every
 push.
 
 ## Tests
@@ -101,7 +103,11 @@ Architectural decisions live in [docs/decisions](docs/decisions/index.md).
   hand. `make check` fails if it is out of date.
 - Use the next free number and the same format as the existing records. If
   another branch merges a record with the same number first, renumber yours
-  before merging. `make check` fails on duplicate numbers.
+  before merging. `make check` fails on duplicate numbers, on index links that
+  do not resolve, and on an edit to an existing record other than its Status
+  line. The last check compares with the merge-base with `origin/main` (or
+  `main`), or with `HEAD~1` when neither exists. CI sets `ADR_BASE` to the pull
+  request base or the previous tip of `main`.
 
 ## Releases
 

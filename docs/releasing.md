@@ -1,6 +1,6 @@
 # Releasing
 
-This page is for maintainers. Pushing a `v*` tag runs
+This page is for maintainers. Pushing a `v*` tag runs the `release` job of
 [`.github/workflows/release.yml`](../.github/workflows/release.yml) in the
 `release` environment. In order, the job:
 
@@ -12,7 +12,8 @@ This page is for maintainers. Pushing a `v*` tag runs
    release, pushes the Homebrew cask to `dscafati/homebrew-tap` and the Scoop
    manifest to `dscafati/scoop-bucket`, and opens a pull request on
    `microsoft/winget-pkgs` from the `dscafati/winget-pkgs` fork.
-3. Attests build provenance for the archives, packages, and checksums.
+3. Attests build provenance for the archives, packages, checksums, SBOMs, and
+   the raw binaries.
 4. Publishes `@secretref/<os>-<cpu>` for each binary, then the `secretref`
    launcher, with npm trusted publishing (`scripts/npm-publish.sh`).
 
@@ -28,7 +29,11 @@ Do these once, in this order, before the first tag.
 ### GitHub repository
 
 - Create the `release` environment under Settings > Environments. Limit its
-  deployment branches and tags to the `v*` tag pattern. Adding yourself as a
+  deployment branches and tags to the `v*` tag pattern (selected branches and
+  tags, add a tag rule `v*`, and no branch rule). This is what keeps `TAP_GITHUB_TOKEN`
+  away from any branch; the workflow also runs the manual dry run outside
+  this environment, but the setting is the control that holds if the workflow
+  is edited. Adding yourself as a
   required reviewer is optional; it makes every release wait for approval.
 - Enable Discussions under Settings > General > Features. The issue chooser
   links "Questions and ideas" to `https://github.com/dscafati/secretref/discussions`,
@@ -142,10 +147,13 @@ You need an npm account with two-factor authentication enabled.
 
 ## Dry run
 
-Run the release workflow by hand (Actions > release > Run workflow, with
-`dry_run` checked). It builds a snapshot with signing and SBOMs, skips every
-GitHub, tap, bucket, and winget publish, and runs `npm publish --dry-run`. The
-npm preflight only warns in a dry run, so it works before the npm bootstrap.
+Run the release workflow by hand (Actions > release > Run workflow). A manual
+run is always a dry run and uses a separate `dry-run` job with no environment,
+no secrets, no `id-token`, and a read-only token, so it cannot publish even if
+the branch it runs from is edited. It builds a snapshot with SBOMs, skips
+signing and every GitHub, tap, bucket, and winget publish, and runs
+`npm publish --dry-run`. The npm preflight only warns in a dry run, so it works
+before the npm bootstrap. Signing happens only in the tag run.
 
 Locally, `make snapshot` builds the same artifacts and manifests into `dist/`
 without signing or SBOMs, because those need cosign and syft on `PATH`.

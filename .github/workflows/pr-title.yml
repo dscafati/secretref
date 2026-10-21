@@ -26,27 +26,3 @@ jobs:
             echo "::error::PR title must follow Conventional Commits: type(scope)!: description"
             exit 1
           fi
-
-  commits:
-    name: No AI co-author trailers
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - name: Reject AI trailers in commit messages
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          bad=$(gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/commits" --jq '
-            .[] | .sha as $sha | .commit.message | split("\n")[]
-            | select(test("(?i)^co-authored-by:.*(claude|anthropic|copilot|openai|chatgpt|gemini|cursor|codex)") or test("(?i)^claude-session:"))
-            | $sha')
-          if [ -n "$bad" ]; then
-            echo "::error::Commits with AI co-author or session trailers:"
-            echo "$bad"
-            exit 1
-          fi
