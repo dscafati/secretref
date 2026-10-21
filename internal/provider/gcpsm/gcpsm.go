@@ -153,5 +153,5 @@ func statusError(status int) error {
 	default:
 		kind = provider.ErrUnavailable
 	}
-	return fmt.Errorf("Secret Manager returned HTTP %d: %w", status, kind)
+	return fmt.Errorf("HTTP %d from Secret Manager: %w", status, kind)
 }

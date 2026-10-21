@@ -166,7 +166,7 @@ func TestErrorMapping(t *testing.T) {
 			if strings.Contains(err.Error(), canaryBody) {
 				t.Fatalf("error text includes response body: %q", err.Error())
 			}
-			if want := fmt.Sprintf("Secret Manager returned HTTP %d: %s", tt.status, tt.want); err.Error() != want {
+			if want := fmt.Sprintf("HTTP %d from Secret Manager: %s", tt.status, tt.want); err.Error() != want {
 				t.Fatalf("error text = %q, want %q", err.Error(), want)
 			}
 		})
