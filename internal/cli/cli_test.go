@@ -234,6 +234,27 @@ func TestRunEnvFileFlag(t *testing.T) {
 	h.expect(2, "run", "--env-file", "missing.env", "--", "tool")
 }
 
+func TestRunWarnsOnSkippedLines(t *testing.T) {
+	h := newHarness(t)
+	h.write(".env", annotatedEnv+"hunter2 pasted\nH-I=dash\n")
+	h.expect(0, "run", "--", "tool")
+	if want := "secretref: warning: .env:4: skipped unparseable line\n"; h.stderr.String() != want {
+		t.Errorf("stderr = %q, want %q", h.stderr.String(), want)
+	}
+	if got, _ := envOf(h.calls[0].env, "B"); got != canary {
+		t.Errorf("B = %q", got)
+	}
+}
+
+func TestCheckWarnsOnSkippedLines(t *testing.T) {
+	h := newHarness(t)
+	h.write(".env", "1X=y\n"+annotatedEnv)
+	h.expect(0, "check")
+	if want := "secretref: warning: .env:1: skipped unparseable line\n"; h.stderr.String() != want {
+		t.Errorf("stderr = %q, want %q", h.stderr.String(), want)
+	}
+}
+
 func TestRunFailure(t *testing.T) {
 	h := newHarness(t)
 	h.write(".env", annotatedEnv+"# secretref: keyring://app/c\nC=x\n")

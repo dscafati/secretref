@@ -47,7 +47,7 @@ func runCheck(cmd *cobra.Command, d Deps, o checkOptions) error {
 	if err != nil {
 		return internalError(err)
 	}
-	entries, err := loadEntries(cmd.Context(), cwd, o.envFiles)
+	entries, err := loadEntries(cmd.Context(), d.Stderr, cwd, o.envFiles)
 	if err != nil {
 		return err
 	}

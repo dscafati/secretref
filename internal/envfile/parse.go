@@ -17,19 +17,26 @@ var annotationPrefix = regexp.MustCompile(`^\s*#\s*secretref:`)
 // annotationRE matches a well-formed annotation and captures the reference.
 var annotationRE = regexp.MustCompile(`^\s*#\s*secretref:\s*(\S+)\s*$`)
 
-const noVariableBelow = "annotation has no variable directly below it"
+const (
+	noVariableBelow = "annotation has no variable directly below it"
+	skippedLine     = "skipped unparseable line"
+)
 
-// Parse reads the env file name from r. name is used in errors and in
-// Entry.File.
+// Parse reads the env file name from r. name is used in errors, in Entry.File,
+// and in Warning.File.
+//
+// A line that is not a valid KEY=VALUE line is skipped with a Warning, as
+// other dotenv loaders skip it, unless it is directly below an annotation:
+// then it is a *ParseError. Malformed annotations are always errors.
 //
 // For QuoteDouble values, escapes \n \r \t \" and \\ are processed. The \$
 // escape is NOT processed: Entry.Value keeps the two characters \$ so that the
 // expansion step can tell a literal dollar sign from an expandable one, and
 // unescapes it itself. Any other backslash sequence is kept as written.
-func Parse(name string, r io.Reader) ([]Entry, error) {
+func Parse(name string, r io.Reader) ([]Entry, []Warning, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", name, err)
+		return nil, nil, fmt.Errorf("read %s: %w", name, err)
 	}
 	p := &parser{name: name, lines: splitLines(string(data))}
 	return p.run()
@@ -61,8 +68,9 @@ func (p *parser) errAt(line int, format string, args ...any) error {
 	return &ParseError{File: p.name, Line: line, Msg: fmt.Sprintf(format, args...)}
 }
 
-func (p *parser) run() ([]Entry, error) {
+func (p *parser) run() ([]Entry, []Warning, error) {
 	var entries []Entry
+	var warnings []Warning
 	for p.pos < len(p.lines) {
 		lineNo := p.pos + 1
 		text := p.lines[p.pos]
@@ -72,25 +80,33 @@ func (p *parser) run() ([]Entry, error) {
 		switch {
 		case trimmed == "":
 			if err := p.requireNoPending(); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		case strings.HasPrefix(trimmed, "#"):
 			if err := p.comment(text, lineNo); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		default:
+			next := p.pos
 			e, err := p.assignment(text, lineNo)
 			if err != nil {
-				return nil, err
+				if p.pending != nil {
+					return nil, nil, err
+				}
+				// Skip only this line, even if an unterminated quote read
+				// further; the following lines parse on their own.
+				p.pos = next
+				warnings = append(warnings, Warning{File: p.name, Line: lineNo, Msg: skippedLine})
+				continue
 			}
 			e.Ref, p.pending = p.pending, nil
 			entries = append(entries, e)
 		}
 	}
 	if err := p.requireNoPending(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return entries, nil
+	return entries, warnings, nil
 }
 
 func (p *parser) requireNoPending() error {
@@ -127,7 +143,7 @@ func isKeyStart(c byte) bool {
 }
 
 func isKeyChar(c byte) bool {
-	return isKeyStart(c) || (c >= '0' && c <= '9') || c == '.'
+	return isKeyStart(c) || (c >= '0' && c <= '9') || c == '.' || c == '-'
 }
 
 func isBlank(c byte) bool { return c == ' ' || c == '\t' }

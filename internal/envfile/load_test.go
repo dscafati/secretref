@@ -23,7 +23,7 @@ func TestLoadOrder(t *testing.T) {
 	dir := t.TempDir()
 	a := write(t, dir, "a.env", "X=1\nY=2\n")
 	b := write(t, dir, "b.env", "X=3\n")
-	entries, err := Load(context.Background(), []string{a, b})
+	entries, _, err := Load(context.Background(), []string{a, b})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,18 +37,35 @@ func TestLoadOrder(t *testing.T) {
 	}
 }
 
+func TestLoadWarningsNameFile(t *testing.T) {
+	dir := t.TempDir()
+	a := write(t, dir, "a.env", "A=1\n")
+	b := write(t, dir, "b.env", "B=2\n1X=y\n")
+	entries, warnings, err := Load(context.Background(), []string{a, b})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("entries = %v", entries)
+	}
+	want := []Warning{{File: b, Line: 2, Msg: "skipped unparseable line"}}
+	if diff := cmp.Diff(want, warnings); diff != "" {
+		t.Errorf("warnings (-want +got):\n%s", diff)
+	}
+}
+
 func TestLoadMissingFile(t *testing.T) {
-	if _, err := Load(context.Background(), []string{filepath.Join(t.TempDir(), "nope.env")}); err == nil {
+	if _, _, err := Load(context.Background(), []string{filepath.Join(t.TempDir(), "nope.env")}); err == nil {
 		t.Fatal("want error for missing file")
 	}
 }
 
 func TestLoadParseErrorNamesFile(t *testing.T) {
-	p := write(t, t.TempDir(), "bad.env", "1X=y\n")
-	_, err := Load(context.Background(), []string{p})
+	p := write(t, t.TempDir(), "bad.env", "# secretref: keyring://a/b\n1X=y\n")
+	_, _, err := Load(context.Background(), []string{p})
 	pe, ok := err.(*ParseError) //nolint:errorlint // Load returns *ParseError directly.
-	if !ok || pe.File != p || pe.Line != 1 {
-		t.Fatalf("err = %v, want ParseError for %s:1", err, p)
+	if !ok || pe.File != p || pe.Line != 2 {
+		t.Fatalf("err = %v, want ParseError for %s:2", err, p)
 	}
 }
 
@@ -56,7 +73,7 @@ func TestLoadHonorsCanceledContext(t *testing.T) {
 	p := write(t, t.TempDir(), "a.env", "X=1\n")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := Load(ctx, []string{p}); !errors.Is(err, context.Canceled) {
+	if _, _, err := Load(ctx, []string{p}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, want context.Canceled", err)
 	}
 }

@@ -1,0 +1,22 @@
+# A line that does not parse is skipped with a warning that names the file and
+# line but never repeats the line; keys may contain "-".
+exec secretref run -- printenv-helper DB_PASSWORD
+stderr '^secretref: warning: \.env:1: skipped unparseable line$'
+! stderr 'hunter2'
+grep '^DB_PASSWORD=SR_CANARY_7f3a9c$' child-env.txt
+no-canary
+
+# The same line directly below an annotation is an error.
+exit-code 2 secretref run --env-file bad.env -- printenv-helper DB_PASSWORD
+stderr '^secretref: bad\.env:2: expected ''='' after variable name$'
+! stderr 'hunter2'
+no-canary
+
+-- .env --
+hunter2 pasted by mistake
+H-I=dash
+# secretref: keyring://app/db_password
+DB_PASSWORD=localdev
+-- bad.env --
+# secretref: keyring://app/db_password
+hunter2 pasted by mistake

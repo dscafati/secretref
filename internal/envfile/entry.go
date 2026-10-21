@@ -37,3 +37,19 @@ type ParseError struct {
 func (e *ParseError) Error() string {
 	return fmt.Sprintf("%s:%d: %s", e.File, e.Line, e.Msg)
 }
+
+// Warning reports a line that Parse skipped because it is not a valid
+// KEY=VALUE line.
+//
+// SECURITY: a Warning never holds text from the line; a secret may have been
+// pasted there.
+type Warning struct {
+	File string
+	Line int
+	Msg  string
+}
+
+// String renders the warning as "<file>:<line>: <msg>".
+func (w Warning) String() string {
+	return fmt.Sprintf("%s:%d: %s", w.File, w.Line, w.Msg)
+}

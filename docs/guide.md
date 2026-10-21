@@ -84,8 +84,8 @@ the files, annotated or not. See
 ## Env file syntax
 
 - `KEY=value` lines, with an optional `export ` prefix.
-- A key starts with a letter or `_` and continues with letters, digits, `_`, or
-  `.`.
+- A key starts with a letter or `_` and continues with letters, digits, `_`,
+  `.`, or `-`.
 - Unquoted values are trimmed. A `#` with a space or tab before it starts a
   comment. A `#` with no space before it is part of the value.
 - Single-quoted values are literal. No escapes are processed, and no variables
@@ -94,6 +94,11 @@ the files, annotated or not. See
 - Quoted values may span several lines.
 - Backtick quotes are not supported.
 - LF and CRLF line endings both work.
+- A line that does not parse is skipped, as other dotenv loaders skip it.
+  secretref prints `secretref: warning: <file>:<line>: skipped unparseable line`
+  on stderr and goes on. The warning never repeats the line, in case a secret
+  was pasted there. A line directly below an annotation must parse: if it does
+  not, secretref names the file and line and exits 2.
 
 Quote any value that contains `#`, so every dotenv loader reads it the same
 way.
