@@ -187,3 +187,18 @@ func TestNotFoundText(t *testing.T) {
 		t.Fatalf("Resolve error = %v, want \"not found\"", err)
 	}
 }
+
+type bigBackend struct{ keyring.Backend }
+
+func (bigBackend) Set(string, string, string) error { return gokeyring.ErrSetDataTooBig }
+
+func TestSetTooBigIsInvalidWithHint(t *testing.T) {
+	p := keyring.NewWithBackend(bigBackend{})
+	err := p.Set(context.Background(), mustRef(t, "keyring://svc/acct"), secret.New([]byte("v")))
+	if !errors.Is(err, provider.ErrInvalid) {
+		t.Fatalf("kind = %q, want invalid", provider.Kind(err))
+	}
+	if !strings.Contains(err.Error(), "aws-sm or gcp-sm") {
+		t.Errorf("error lacks the hint: %v", err)
+	}
+}

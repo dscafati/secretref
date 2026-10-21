@@ -1,0 +1,19 @@
+# A command that exists but cannot be run exits 126, as shells do.
+[windows] skip 'file modes do not apply on Windows'
+
+exec chmod 644 tool.sh
+exit-code 126 secretref run -- ./tool.sh
+stderr '^secretref: command not executable: \./tool\.sh$'
+no-canary
+
+exit-code 126 secretref run -- ./adir
+stderr '^secretref: command not executable: \./adir$'
+no-canary
+
+-- tool.sh --
+#!/bin/sh
+exit 0
+-- adir/keep --
+-- .env --
+# secretref: keyring://app/db_password
+DB_PASSWORD=localdev

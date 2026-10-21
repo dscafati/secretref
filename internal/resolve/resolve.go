@@ -192,10 +192,9 @@ func (r *Resolver) valueOf(s *slot, lookup func(string) (string, bool)) string {
 	case kindEnv:
 		return s.value
 	case kindSecret:
-		// SECURITY: a plain value such as DATABASE_URL=...${PW}... needs the
-		// real secret text to build the composite string. The text stays inside
-		// the child-bound environment: it is copied into another secret.Secret
-		// and never logged or returned in an error.
+		// SECURITY: a composite value such as DATABASE_URL=...${PW}... needs the
+		// real secret text. It is copied into another secret.Secret, bound for
+		// the child environment, and never logged or returned in an error.
 		return string(s.sec.Reveal())
 	}
 	switch s.state {
@@ -314,8 +313,7 @@ func (res Result) Environ(base []string) []string {
 		if v.FromEnv {
 			continue
 		}
-		// SECURITY: the only place a resolved value becomes a string. The result
-		// goes to the child process environment and nowhere else.
+		// SECURITY: this value goes to the child process environment and nowhere else.
 		out = append(out, v.Key+"="+string(v.Value.Reveal()))
 	}
 	return out

@@ -225,6 +225,13 @@ DB_PASSWORD=localdev
     running provider such as GNOME Keyring or KeePassXC. Headless machines
     often have none, and lookups then fail as `unavailable`.
 - Entries belong to the current OS user.
+- secretref reads items written by `secretref set`, which uses go-keyring's
+  encoding. On macOS, items created by other tools (Keychain Access, the
+  `security` tool) may come back trimmed or hex-encoded, because go-keyring
+  decodes what it reads. Store values with `secretref set`.
+- Size limits: Windows Credential Manager takes about 2560 bytes and the macOS
+  `security` command about 3000 bytes of value. `secretref set` rejects a larger
+  value as `invalid`. Store large secrets in aws-sm or gcp-sm.
 
 ## JSON fields
 
@@ -364,6 +371,11 @@ The design is in [decision 0009](decisions/0009-compose-names-only-override.md).
 
 - Windows cannot replace a process, so secretref starts the command as a
   child, waits for it, and exits with its exit code.
+- On Unix in compose mode, secretref does not forward a SIGINT that is sent
+  directly to its own PID while it is in the terminal's foreground process
+  group, because it cannot tell that signal from the terminal's own Ctrl+C,
+  which already reaches the child. Send such signals to the process group, or
+  use SIGTERM.
 - On Ctrl+C, the console sends the interrupt to both secretref and the child.
   secretref ignores it and waits for the child to exit. The child decides how
   to stop.
@@ -371,6 +383,9 @@ The design is in [decision 0009](decisions/0009-compose-names-only-override.md).
   is searched in `PATH`. Unlike `cmd.exe`, secretref does not search the
   current directory. Use `.\app.exe` for a program there.
 - CRLF env files work.
+- `.cmd` and `.bat` shims (for example `npm.cmd`) run through `cmd.exe`, which
+  interprets `&`, `|`, `%`, and `^` in arguments. Invoke `node` or the real
+  `.exe` directly when an argument can contain those characters.
 
 ## Troubleshooting
 
@@ -382,7 +397,8 @@ Diagnostics go to stderr. Stdout belongs to your command.
 | 1 | Internal error. | The error text. Report a bug if it persists. |
 | 2 | Usage error, a bad env file or annotation, or no env file. | The `file:line` in the message, the reference syntax and scheme, the `--` before the command, and that `.env` or `.env.local` exists in the current directory. |
 | 3 | A reference failed to resolve. | The failure kind below. Run `secretref check` for the full list. |
-| 127 | Command not found or not executable. | The command name and the `PATH` the child gets. |
+| 126 | The command exists but cannot be run. | The file mode (`chmod +x`), that it is not a directory, and a `#!` line for scripts. |
+| 127 | Command not found. | The command name and the `PATH` the child gets. |
 
 When a reference fails, secretref prints one line per failed key with the
 reference and a failure kind:

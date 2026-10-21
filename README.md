@@ -121,7 +121,8 @@ Authentication for each provider is in the [user guide](docs/guide.md#providers-
 | 1 | Internal error. |
 | 2 | Usage error, an invalid env file or annotation, or no env file found. |
 | 3 | A reference failed to resolve. `delete` also exits 3 when the item does not exist. |
-| 127 | The command was not found or is not executable. |
+| 126 | The command exists but cannot be run: not executable, a directory, or a script without a shebang line. |
+| 127 | The command was not found. |
 
 ## Not in scope
 

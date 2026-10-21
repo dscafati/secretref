@@ -161,6 +161,8 @@ func startResult(argv []string, code int, err error) error {
 	switch {
 	case errors.Is(err, procexec.ErrCommandNotFound):
 		return &exitError{code: exitNotFound, msg: "command not found: " + argv[0]}
+	case errors.Is(err, procexec.ErrCommandNotExecutable):
+		return &exitError{code: exitNotExec, msg: "command not executable: " + argv[0]}
 	case err != nil:
 		return internalError(err)
 	case code != exitOK:

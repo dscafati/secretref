@@ -40,17 +40,6 @@ func TestLookupUsesChildPath(t *testing.T) {
 	}
 }
 
-func TestNonExecutableIsNotFound(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "plain"), []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	_, err := procexec.Spawn(context.Background(), []string{"plain"}, []string{"PATH=" + dir})
-	if !errors.Is(err, procexec.ErrCommandNotFound) {
-		t.Fatalf("error = %v, want ErrCommandNotFound", err)
-	}
-}
-
 func TestHoldCatchesSignal(t *testing.T) {
 	received, stop := procexec.Hold()
 	defer stop()
@@ -68,4 +57,38 @@ func TestHoldCatchesSignal(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("no signal received")
+}
+
+func TestCommandNotExecutable(t *testing.T) {
+	dir := t.TempDir()
+	plain := filepath.Join(dir, "plain")
+	if err := os.WriteFile(plain, []byte("#!/bin/sh\nexit 0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	noShebang := filepath.Join(dir, "noshebang")
+	if err := os.WriteFile(noShebang, []byte("exit 0\n"), 0o700); err != nil { //nolint:gosec // test script must be executable
+		t.Fatal(err)
+	}
+	tests := map[string][]string{
+		"not executable": {plain},
+		"directory":      {dir},
+		"on PATH":        {"plain"},
+	}
+	for name, argv := range tests {
+		t.Run(name, func(t *testing.T) {
+			env := []string{"PATH=" + dir}
+			if _, err := procexec.Spawn(context.Background(), argv, env); !errors.Is(err, procexec.ErrCommandNotExecutable) {
+				t.Errorf("Spawn error = %v, want ErrCommandNotExecutable", err)
+			}
+			if err := procexec.Replace(argv, env); !errors.Is(err, procexec.ErrCommandNotExecutable) {
+				t.Errorf("Replace error = %v, want ErrCommandNotExecutable", err)
+			}
+		})
+	}
+	t.Run("no shebang", func(t *testing.T) {
+		argv := []string{noShebang}
+		if err := procexec.Replace(argv, []string{"PATH=" + dir}); !errors.Is(err, procexec.ErrCommandNotExecutable) {
+			t.Errorf("Replace error = %v, want ErrCommandNotExecutable", err)
+		}
+	})
 }

@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
+
+	gokeyring "github.com/zalando/go-keyring"
 
 	"github.com/dscafati/secretref/internal/provider"
 	"github.com/dscafati/secretref/internal/ref"
@@ -48,6 +51,8 @@ func (p *Provider) Set(ctx context.Context, r ref.Ref, s secret.Secret) error {
 		return err
 	}
 	_, err := call(ctx, func() (struct{}, error) {
+		// SECURITY: the OS keyring API takes a string; this is the stored value
+		// itself, passed to the backend and never logged or returned.
 		return struct{}{}, p.backend.Set(r.Location, r.Name, string(s.Reveal()))
 	})
 	return err
@@ -106,5 +111,19 @@ func mapErr(err error) error {
 	if errors.Is(err, provider.ErrNotFound) {
 		return provider.ErrNotFound
 	}
+	if errors.Is(err, gokeyring.ErrSetDataTooBig) {
+		return fmt.Errorf("value too large for the OS keyring (%s limit ~%d bytes); store it in aws-sm or gcp-sm instead: %w",
+			runtime.GOOS, sizeLimit(runtime.GOOS), provider.ErrInvalid)
+	}
 	return fmt.Errorf("OS keyring failed: %w", provider.ErrUnavailable)
+}
+
+// sizeLimit is the approximate largest value go-keyring stores on goos.
+// Windows Credential Manager takes 2560 bytes; on macOS the value is
+// base64-encoded into a 4096-byte security command.
+func sizeLimit(goos string) int {
+	if goos == "windows" {
+		return 2560
+	}
+	return 3000
 }

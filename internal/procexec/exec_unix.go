@@ -20,8 +20,11 @@ func Replace(argv, env []string) error {
 	}
 	//nolint:gosec // G204: running the user's command is the purpose of secretref.
 	err = syscall.Exec(path, argv, env)
-	if errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.EACCES) {
+	if errors.Is(err, syscall.ENOENT) {
 		return fmt.Errorf("%s: %w", argv[0], ErrCommandNotFound)
+	}
+	if errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.ENOEXEC) {
+		return fmt.Errorf("%s: %w", argv[0], ErrCommandNotExecutable)
 	}
 	return fmt.Errorf("exec %s: %w", argv[0], err)
 }
@@ -38,6 +41,10 @@ func newForwarder() func(*os.Process, os.Signal) {
 
 // forwarderWith returns a function that passes a signal to the child unless
 // shouldForward says the terminal already delivered it. The terminal is
+// Known limitation: a SIGINT sent directly to secretref's PID while it is in
+// the terminal's foreground group is not forwarded, because it cannot be told
+// apart from the terminal's own Ctrl+C, which already reached the child.
+// The terminal is
 // looked up for every signal, because job control (Ctrl+Z, bg, fg) moves
 // secretref in and out of the foreground while the child runs.
 func forwarderWith(foreground func() (int, bool)) func(*os.Process, os.Signal) {

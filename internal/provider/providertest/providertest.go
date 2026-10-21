@@ -84,6 +84,8 @@ func assertRoundTrip(t *testing.T, p provider.Provider, setup Setup, name, value
 	if err != nil {
 		t.Fatalf("Resolve(%s) failed: kind=%s", r.Raw, provider.Kind(err))
 	}
+	// SECURITY: test-only comparison against the value the test just stored;
+	// a mismatch reports no value.
 	if !bytes.Equal(got.Reveal(), []byte(value)) {
 		t.Fatalf("Resolve(%s): value mismatch", r.Raw)
 	}

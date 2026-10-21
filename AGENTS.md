@@ -26,7 +26,7 @@ Never install tools globally and never edit tool versions anywhere else.
 ## Invariants
 
 - No resolved value in stdout, stderr, logs, error text, or any file. Ever.
-- Exit codes: the child's code; 1 internal; 2 usage or no env file; 3 resolution failed; 127 command not found.
+- Exit codes: the child's code; 1 internal; 2 usage or no env file; 3 resolution failed; 126 command not executable; 127 command not found.
 - Defaults: env files `.env` then `.env.local`; concurrency 8; timeout 30s.
 - The existing process environment wins over file values and is never resolved.
 - `set` and `delete` accept only `keyring://`.
