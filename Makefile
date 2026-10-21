@@ -92,5 +92,8 @@ adr-check:
 skills-check:
 	sh scripts/check-skills-link.sh
 
+# Local snapshot of every artifact and package-manager manifest. Signing and
+# SBOMs need cosign and syft on PATH, so they are skipped here; the release
+# workflow's dry run (workflow_dispatch) exercises them.
 snapshot:
-	$(TOOL) goreleaser release --snapshot --clean
+	$(TOOL) goreleaser release --snapshot --clean --skip=sign,sbom
