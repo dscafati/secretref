@@ -29,3 +29,4 @@ A record has one of these statuses:
 | 0016 | [Inject annotated keys by default](0016-inject-annotated-keys-by-default.md) | Accepted |
 | 0017 | [Provider interfaces live in the provider package](0017-provider-interfaces-live-in-the-provider-package.md) | Accepted |
 | 0018 | [References are printable text without dot segments](0018-printable-references-without-dot-segments.md) | Accepted |
+| 0019 | [Document only install channels with an update path](0019-install-channels-with-an-update-path.md) | Accepted |
