@@ -39,11 +39,30 @@ secretref run -- npm start
 
 ## Install
 
+Pick one.
+
+macOS or Linux, with Homebrew:
+
 ```sh
 brew install --cask dscafati/tap/secretref
+```
+
+Windows, with Scoop:
+
+```sh
 scoop bucket add dscafati https://github.com/dscafati/scoop-bucket
 scoop install dscafati/secretref
+```
+
+Any platform, with npm:
+
+```sh
 npm install -g secretref
+```
+
+Any platform, with Go:
+
+```sh
 go install github.com/dscafati/secretref/cmd/secretref@latest
 ```
 
