@@ -5,6 +5,9 @@ secret lives, and `secretref run` starts your command with the real values.
 
 > Early preview. Expect breaking changes before 1.0.
 
+If secretref saves you time, [star it on GitHub](https://github.com/dscafati/secretref)
+so other developers can find it.
+
 ## Nothing to roll out
 
 You do not change your team's workflow, your apps, or your repo. One developer
